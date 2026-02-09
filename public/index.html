@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0a0a12">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Aurora Chase Copilot</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-title">
+        <h1>TROMS&Oslash; AURORA CHASE COPILOT</h1>
+        <span class="subtitle">3-Hour Radius</span>
+      </div>
+      <div class="header-status" id="status-indicator">
+        <span class="status-dot"></span>
+        <span class="status-text">Ready</span>
+      </div>
+    </header>
+
+    <!-- Command Bar -->
+    <nav class="command-bar">
+      <button class="cmd-btn cmd-primary" onclick="runPlan()">
+        <span class="cmd-icon">&#9733;</span>
+        RUN DAILY PLAN
+      </button>
+      <button class="cmd-btn" onclick="showUpdateModal()">
+        <span class="cmd-icon">&#8635;</span>
+        UPDATE NOW
+      </button>
+      <button class="cmd-btn" onclick="showCameraModal()">
+        <span class="cmd-icon">&#9898;</span>
+        CAMERA HELP
+      </button>
+      <button class="cmd-btn" onclick="showParking()">
+        <span class="cmd-icon">&#9899;</span>
+        SAFE PARKING
+      </button>
+      <button class="cmd-btn" onclick="condensePlan()">
+        <span class="cmd-icon">&#9776;</span>
+        CONDENSE
+      </button>
+    </nav>
+
+    <!-- Countdown Timer Bar -->
+    <div id="countdown-bar" class="countdown-bar hidden">
+      <span class="countdown-label">Next</span>
+      <span class="countdown-event"></span>
+      <span class="countdown-time"></span>
+    </div>
+
+    <!-- Loading State -->
+    <div id="loading" class="loading hidden">
+      <div class="spinner"></div>
+      <p>Fetching live weather &amp; aurora data...</p>
+      <p class="loading-sub">Checking met.no + NOAA SWPC for all zones</p>
+    </div>
+
+    <!-- Error State -->
+    <div id="error" class="error-box hidden"></div>
+
+    <!-- Plan Content -->
+    <main id="plan-content" class="plan-content hidden"></main>
+
+    <!-- Modal Overlay -->
+    <div id="modal-overlay" class="modal-overlay hidden" onclick="closeModal(event)">
+      <div class="modal" onclick="event.stopPropagation()">
+        <button class="modal-close" onclick="hideModal()">&times;</button>
+        <div id="modal-content"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
