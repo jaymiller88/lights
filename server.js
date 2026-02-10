@@ -2,6 +2,7 @@ import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { generatePlan, condensePlan, generateUpdateResponse, diagnoseCamera } from './src/planner.js';
+import { getZonedDateStr } from './src/timezone.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -14,16 +15,42 @@ app.use(express.static(join(__dirname, 'public')));
 
 // Cache the last generated plan
 let cachedPlan = null;
-let cachedPlanDate = null;
+let cachedPlanKey = null;
 let generating = false;
+
+function parseBool(val, defaultValue) {
+  if (val === undefined || val === null) return defaultValue;
+  if (val === true || val === 'true' || val === '1') return true;
+  if (val === false || val === 'false' || val === '0') return false;
+  return defaultValue;
+}
 
 // GET /api/plan - Generate tonight's aurora plan
 app.get('/api/plan', async (req, res) => {
   try {
-    const date = req.query.date || new Date().toISOString().slice(0, 10);
+    const date = req.query.date || getZonedDateStr(new Date(), 'Europe/Oslo');
+
+    const maxDriveMinutes = req.query.maxDriveMinutes !== undefined ? parseInt(req.query.maxDriveMinutes, 10) : undefined;
+    const driveLimitMode = req.query.driveLimitMode;
+    const winterComfort = req.query.winterComfort;
+    const includeBorderCrossing = parseBool(req.query.includeBorderCrossing, true);
+    const includeFerry = parseBool(req.query.includeFerry, true);
+    const timeZone = req.query.timeZone;
+    const debug = parseBool(req.query.debug, false);
+
+    const key = JSON.stringify({
+      date,
+      maxDriveMinutes: Number.isFinite(maxDriveMinutes) ? maxDriveMinutes : undefined,
+      driveLimitMode,
+      winterComfort,
+      includeBorderCrossing,
+      includeFerry,
+      timeZone,
+      debug,
+    });
 
     // Return cached plan if same date and less than 30 min old
-    if (cachedPlan && cachedPlanDate === date &&
+    if (cachedPlan && cachedPlanKey === key &&
         Date.now() - new Date(cachedPlan.generatedAt).getTime() < 30 * 60 * 1000) {
       return res.json({ ok: true, plan: cachedPlan, cached: true });
     }
@@ -33,9 +60,17 @@ app.get('/api/plan', async (req, res) => {
     }
 
     generating = true;
-    const plan = await generatePlan(date);
+    const plan = await generatePlan(date, {
+      maxDriveMinutes,
+      driveLimitMode,
+      winterComfort,
+      includeBorderCrossing,
+      includeFerry,
+      timeZone,
+      debug,
+    });
     cachedPlan = plan;
-    cachedPlanDate = date;
+    cachedPlanKey = key;
     generating = false;
 
     res.json({ ok: true, plan, cached: false });

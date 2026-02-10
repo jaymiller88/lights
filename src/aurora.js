@@ -1,6 +1,8 @@
 // Aurora forecast service using NOAA SWPC data
 // Fetches Kp index forecasts and OVATION aurora probability
 
+import { addDaysToDateStr, getZonedDateStr, getZonedHour } from './timezone.js';
+
 const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 const cache = new Map();
 
@@ -100,26 +102,22 @@ export function getAuroraProbabilityForTromso(ovationData) {
 }
 
 // Get tonight's Kp values (evening hours)
-export function getTonightKp(kpEntries, targetDate) {
+export function getTonightKp(kpEntries, targetDate, timeZone = 'Europe/Oslo', startHour = 18, endHour = 3) {
   if (!kpEntries) return { avg: null, max: null, entries: [] };
 
+  const nextDateStr = addDaysToDateStr(targetDate, 1);
+  const crossesMidnight = endHour <= startHour;
   const tonight = [];
   for (const entry of kpEntries) {
-    const entryDate = new Date(entry.time);
-    const entryDateStr = entryDate.toISOString().slice(0, 10);
-    const hour = entryDate.getUTCHours();
+    const d = new Date(entry.time);
+    const localDateStr = getZonedDateStr(d, timeZone);
+    const localHour = getZonedHour(d, timeZone);
 
-    // Evening in Norway (CET = UTC+1): 18:00-03:00 local = 17:00-02:00 UTC
-    if (entryDateStr === targetDate && hour >= 17) {
-      tonight.push(entry);
-    }
-    // Next day early morning
-    const nextDate = new Date(targetDate);
-    nextDate.setDate(nextDate.getDate() + 1);
-    const nextDateStr = nextDate.toISOString().slice(0, 10);
-    if (entryDateStr === nextDateStr && hour <= 2) {
-      tonight.push(entry);
-    }
+    const inWindow = crossesMidnight
+      ? ((localDateStr === targetDate && localHour >= startHour) || (localDateStr === nextDateStr && localHour <= endHour))
+      : (localDateStr === targetDate && localHour >= startHour && localHour <= endHour);
+
+    if (inWindow) tonight.push(entry);
   }
 
   if (tonight.length === 0) return { avg: null, max: null, entries: tonight };

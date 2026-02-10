@@ -1,6 +1,8 @@
 // Weather service using met.no LocationForecast 2.0 API
 // https://api.met.no/weatherapi/locationforecast/2.0/documentation
 
+import { addDaysToDateStr, getZonedParts } from './timezone.js';
+
 const USER_AGENT = 'TromsoAuroraCopilot/1.0 github.com/aurora-copilot';
 const BASE_URL = 'https://api.met.no/weatherapi/locationforecast/2.0/compact';
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
@@ -76,35 +78,27 @@ export async function fetchMultipleLocations(locations, concurrency = 4) {
 
 // Extract evening forecast data (target hours for aurora watching)
 // Returns hourly data from startHour to endHour (next day if endHour < startHour)
-// All times handled in UTC; CET offset (+1) applied only for local hour display
-export function extractEveningForecast(weatherData, targetDate, startHour = 18, endHour = 3) {
+// Times are evaluated in the requested `timeZone` so DST is handled correctly.
+export function extractEveningForecast(weatherData, targetDate, startHour = 18, endHour = 3, timeZone = 'Europe/Oslo') {
   if (!weatherData?.properties?.timeseries) return [];
 
   const timeseries = weatherData.properties.timeseries;
   const entries = [];
 
-  // Build UTC boundaries from local CET targets
-  // CET = UTC+1, so local 18:00 CET = 17:00 UTC, local 03:00 CET = 02:00 UTC
-  const CET_OFFSET = 1;
-  const startUTC = startHour - CET_OFFSET; // 17
-  const endUTC = endHour - CET_OFFSET;     // 2
-
-  // Target window in epoch ms for precise comparison
-  const startMs = new Date(`${targetDate}T${String(startUTC).padStart(2, '0')}:00:00Z`).getTime();
-  // End is next day if window crosses midnight
-  const nextDate = new Date(targetDate);
-  nextDate.setUTCDate(nextDate.getUTCDate() + 1);
-  const nextDateStr = nextDate.toISOString().slice(0, 10);
-  const endMs = endUTC <= startUTC
-    ? new Date(`${nextDateStr}T${String(endUTC).padStart(2, '0')}:00:00Z`).getTime()
-    : new Date(`${targetDate}T${String(endUTC).padStart(2, '0')}:00:00Z`).getTime();
+  const nextDateStr = addDaysToDateStr(targetDate, 1);
+  const crossesMidnight = endHour <= startHour;
 
   for (const entry of timeseries) {
-    const timeMs = new Date(entry.time).getTime();
+    const d = new Date(entry.time);
+    const p = getZonedParts(d, timeZone);
+    const localDateStr = `${String(p.year).padStart(4, '0')}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`;
+    const localHour = p.hour;
 
-    if (timeMs >= startMs && timeMs <= endMs) {
-      const utcHour = new Date(entry.time).getUTCHours();
-      const localHour = (utcHour + CET_OFFSET) % 24;
+    const inWindow = crossesMidnight
+      ? ((localDateStr === targetDate && localHour >= startHour) || (localDateStr === nextDateStr && localHour <= endHour))
+      : (localDateStr === targetDate && localHour >= startHour && localHour <= endHour);
+
+    if (inWindow) {
 
       const instant = entry.data?.instant?.details || {};
       const next1h = entry.data?.next_1_hours || {};

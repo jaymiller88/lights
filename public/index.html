@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#0a0a12">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -15,7 +15,7 @@
     <header class="header">
       <div class="header-title">
         <h1>TROMS&Oslash; AURORA CHASE COPILOT</h1>
-        <span class="subtitle">3-Hour Radius</span>
+        <span class="subtitle" id="subtitle">3-Hour Radius</span>
       </div>
       <div class="header-status" id="status-indicator">
         <span class="status-dot"></span>
@@ -28,6 +28,10 @@
       <button class="cmd-btn cmd-primary" onclick="runPlan()">
         <span class="cmd-icon">&#9733;</span>
         RUN DAILY PLAN
+      </button>
+      <button class="cmd-btn" onclick="showSettingsModal()">
+        <span class="cmd-icon">&#9881;</span>
+        SETTINGS
       </button>
       <button class="cmd-btn" onclick="showUpdateModal()">
         <span class="cmd-icon">&#8635;</span>
@@ -46,6 +50,9 @@
         CONDENSE
       </button>
     </nav>
+
+    <!-- Location Prompt (mobile-friendly; uses user gesture for GPS permission) -->
+    <div id="location-prompt" class="location-prompt hidden"></div>
 
     <!-- Countdown Timer Bar -->
     <div id="countdown-bar" class="countdown-bar hidden">

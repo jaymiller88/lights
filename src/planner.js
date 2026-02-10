@@ -2,31 +2,101 @@
 // Implements the scoring algorithm and generates the full structured plan
 
 import { ZONES, WEATHER_CHECKPOINTS, getCloudRegime, getAllLocations } from './zones.js';
-import { fetchWeather, extractEveningForecast, scoreWeather } from './weather.js';
+import { fetchMultipleLocations, extractEveningForecast, scoreWeather } from './weather.js';
 import { getAuroraSummary } from './aurora.js';
 import { getDarkWindow } from './sun.js';
+import { addDaysToDateStr, zonedTimeToUtcMs } from './timezone.js';
 
 const TROMSO_LAT = 69.6496;
 const TROMSO_LON = 18.9560;
 
+function normalizeOptions(options = {}) {
+  const maxDriveMinutesRaw = options.maxDriveMinutes;
+  let maxDriveMinutes = Number.isFinite(Number(maxDriveMinutesRaw)) ? Number(maxDriveMinutesRaw) : 180;
+  // Clamp to a sane range (0..12h)
+  maxDriveMinutes = Math.max(0, Math.min(12 * 60, Math.round(maxDriveMinutes)));
+
+  const driveLimitMode = options.driveLimitMode === 'soft' ? 'soft' : 'hard';
+  const winterComfort = options.winterComfort === 'low' || options.winterComfort === 'high'
+    ? options.winterComfort
+    : 'medium';
+
+  const includeBorderCrossing = options.includeBorderCrossing !== false;
+  const includeFerry = options.includeFerry !== false;
+  const timeZone = typeof options.timeZone === 'string' && options.timeZone ? options.timeZone : 'Europe/Oslo';
+  const debug = options.debug === true;
+
+  return {
+    maxDriveMinutes,
+    driveLimitMode,
+    winterComfort,
+    includeBorderCrossing,
+    includeFerry,
+    timeZone,
+    debug,
+  };
+}
+
 // Score a zone based on weather + metadata
-function scoreZone(zoneCode, weatherScore, zone) {
-  if (!weatherScore.valid) return { total: -1, breakdown: {} };
+function scoreZone(zoneCode, weatherScore, zone, options = {}) {
+  const opts = normalizeOptions(options);
+  const exclusionReasons = [];
+
+  if (!weatherScore.valid) {
+    return { total: -1, breakdown: {}, excluded: true, exclusionReasons: ['No weather data'] };
+  }
 
   const weatherTotal = weatherScore.total; // 0-85
   const darknessBonus = zone.lightPollutionScore; // 0-15
-  // Drive time penalty: longer drives get slight penalty
+
+  // Drive time penalty: longer drives get slight penalty (scaled by comfort)
   const avgDrive = (zone.driveMinutes[0] + zone.driveMinutes[1]) / 2;
-  const drivePenalty = Math.min(avgDrive / 20, 8); // max -8 for very long drives
+  const drivePenaltyScale = opts.winterComfort === 'low' ? 1.35 : opts.winterComfort === 'high' ? 0.85 : 1.0;
+  const drivePenalty = Math.min(avgDrive / 20, 8) * drivePenaltyScale; // max ~-11 for very long drives on low comfort
+
+  // Drive limit (hard cutoff vs soft penalty)
+  if (avgDrive > opts.maxDriveMinutes && opts.driveLimitMode === 'hard') {
+    exclusionReasons.push(`Over max drive time (${Math.round(avgDrive)}min > ${opts.maxDriveMinutes}min)`);
+  }
+
+  // Optional constraints
+  if (!opts.includeBorderCrossing && zone.requiresBorderCrossing) {
+    exclusionReasons.push('Border crossing disabled');
+  }
+  if (!opts.includeFerry && zone.mayRequireFerry) {
+    exclusionReasons.push('Ferry options disabled');
+  }
+
+  if (exclusionReasons.length > 0) {
+    return {
+      total: -1,
+      breakdown: { weather: weatherTotal, darkness: darknessBonus, drivePenalty: -drivePenalty },
+      excluded: true,
+      exclusionReasons,
+    };
+  }
+
+  // Soft over-limit penalty (kept separate so we can show it in UI)
+  let overLimitPenalty = 0;
+  if (avgDrive > opts.maxDriveMinutes && opts.driveLimitMode === 'soft') {
+    // Gentle slope for small overruns, capped so weather can still win if it's massively better.
+    const over = avgDrive - opts.maxDriveMinutes;
+    overLimitPenalty = Math.min(20, Math.round((over / 10) * 10) / 10); // up to -20
+  }
+
   // Safety penalties
   let safetyPenalty = 0;
   if (zone.requiresBorderCrossing) safetyPenalty += 5;
   if (zone.mayRequireFerry) safetyPenalty += 3;
   // High wind + long drive = extra penalty
-  if (weatherScore.avgWind > 10 && avgDrive > 60) safetyPenalty += 5;
-  if (weatherScore.maxGust > 15 && avgDrive > 30) safetyPenalty += 3;
+  const windThreshold = opts.winterComfort === 'low' ? 8 : opts.winterComfort === 'high' ? 12 : 10;
+  const gustThreshold = opts.winterComfort === 'low' ? 13 : opts.winterComfort === 'high' ? 17 : 15;
+  if (weatherScore.avgWind > windThreshold && avgDrive > 60) safetyPenalty += 5;
+  if (weatherScore.maxGust > gustThreshold && avgDrive > 30) safetyPenalty += 3;
+  const safetyScale = opts.winterComfort === 'low' ? 1.25 : opts.winterComfort === 'high' ? 0.9 : 1.0;
+  safetyPenalty *= safetyScale;
 
-  const total = weatherTotal + darknessBonus - drivePenalty - safetyPenalty;
+  const total = weatherTotal + darknessBonus - drivePenalty - safetyPenalty - overLimitPenalty;
 
   return {
     total: Math.round(total * 10) / 10,
@@ -35,7 +105,10 @@ function scoreZone(zoneCode, weatherScore, zone) {
       darkness: darknessBonus,
       drivePenalty: -drivePenalty,
       safetyPenalty: -safetyPenalty,
+      overLimitPenalty: -overLimitPenalty,
     },
+    excluded: false,
+    exclusionReasons: [],
   };
 }
 
@@ -70,14 +143,14 @@ function selectPlans(zoneScoredList) {
 }
 
 // Pick the best specific location within a zone
-function pickBestLocation(zone, weatherResults, targetDate) {
+function pickBestLocation(zone, weatherResults, targetDate, timeZone) {
   let bestLoc = zone.locations[0];
   let bestScore = -1;
 
   for (const loc of zone.locations) {
     const result = weatherResults.get(loc.id);
     if (!result || !result.data) continue;
-    const evening = extractEveningForecast(result.data, targetDate);
+    const evening = extractEveningForecast(result.data, targetDate, 18, 3, timeZone);
     const score = scoreWeather(evening);
     if (score.total > bestScore) {
       bestScore = score.total;
@@ -154,10 +227,111 @@ function classifyCheckpoint(ws) {
   return 'MAYBE';
 }
 
+function buildExplorer(dateStr, weatherMap, options, selectedLocationIds = new Set()) {
+  const opts = normalizeOptions(options);
+  const locations = [];
+  const zones = [];
+
+  for (const zone of Object.values(ZONES)) {
+    let best = null;
+    for (const loc of zone.locations) {
+      const wr = weatherMap.get(loc.id);
+      const evening = wr?.data ? extractEveningForecast(wr.data, dateStr, 18, 3, opts.timeZone) : [];
+      const ws = scoreWeather(evening);
+      const score = scoreZone(zone.code, ws, zone, opts);
+      const warnings = [];
+      if (zone.requiresBorderCrossing) warnings.push('Border crossing required');
+      if (zone.mayRequireFerry) warnings.push('Ferry may be required');
+
+      const row = {
+        id: loc.id,
+        name: loc.name,
+        zoneCode: zone.code,
+        zoneName: zone.name,
+        anchor: loc.anchor,
+        parking: loc.parking,
+        notes: loc.notes,
+        driveMinutes: zone.driveMinutes,
+        driveTime: `${zone.driveMinutes[0]}-${zone.driveMinutes[1]} min`,
+        lightPollution: zone.lightPollution,
+        weather: {
+          cloudTotal: ws.avgCloudTotal ?? null,
+          cloudLow: ws.avgCloudLow ?? null,
+          precip: ws.maxPrecip ?? null,
+          wind: ws.avgWind ?? null,
+          gust: ws.maxGust ?? null,
+          tempC: ws.tempC ?? null,
+          total: ws.total ?? null,
+          valid: ws.valid === true,
+        },
+        score: {
+          total: score.total,
+          breakdown: score.breakdown,
+          excluded: score.excluded === true,
+          exclusionReasons: score.exclusionReasons || [],
+        },
+        verdict: score.excluded ? 'EXCL' : classifyCheckpoint(ws),
+        warnings,
+        selected: selectedLocationIds.has(loc.id),
+      };
+
+      locations.push(row);
+
+      if (!row.score.excluded && (best === null || row.score.total > best.score.total)) {
+        best = row;
+      }
+    }
+
+    zones.push({
+      zoneCode: zone.code,
+      zoneName: zone.name,
+      driveMinutes: zone.driveMinutes,
+      lightPollution: zone.lightPollution,
+      bestLocation: best ? {
+        id: best.id,
+        name: best.name,
+        anchor: best.anchor,
+        score: best.score,
+        weather: best.weather,
+        verdict: best.verdict,
+        warnings: best.warnings,
+      } : null,
+    });
+  }
+
+  // Highest score first; excluded always sink to bottom.
+  locations.sort((a, b) => {
+    const ae = a.score.excluded ? 1 : 0;
+    const be = b.score.excluded ? 1 : 0;
+    if (ae !== be) return ae - be;
+    return (b.score.total ?? -1) - (a.score.total ?? -1);
+  });
+
+  zones.sort((a, b) => {
+    const as = a.bestLocation?.score?.total ?? -1;
+    const bs = b.bestLocation?.score?.total ?? -1;
+    return bs - as;
+  });
+
+  return {
+    settings: {
+      maxDriveMinutes: opts.maxDriveMinutes,
+      driveLimitMode: opts.driveLimitMode,
+      winterComfort: opts.winterComfort,
+      includeBorderCrossing: opts.includeBorderCrossing,
+      includeFerry: opts.includeFerry,
+      timeZone: opts.timeZone,
+    },
+    zones,
+    locations,
+  };
+}
+
 // Main plan generation function
-export async function generatePlan(targetDate) {
+export async function generatePlan(targetDate, options = {}) {
   const dateStr = targetDate || new Date().toISOString().slice(0, 10);
   const [year, month, day] = dateStr.split('-').map(Number);
+  const opts = normalizeOptions(options);
 
   // Fetch aurora data (with fallback on failure)
   let aurora;
@@ -190,18 +364,8 @@ export async function generatePlan(targetDate) {
     if (!seen.has(key)) { seen.add(key); fetchList.push(loc); }
   }
 
-  // Fetch all weather in parallel with per-location error handling
-  const weatherResults = await Promise.all(
-    fetchList.map(loc =>
-      fetchWeather(loc.lat, loc.lon)
-        .then(data => ({ id: loc.id, data }))
-        .catch(err => ({ id: loc.id, data: null, error: err.message }))
-    )
-  );
-  const weatherMap = new Map();
-  for (const r of weatherResults) {
-    weatherMap.set(r.id, r);
-  }
+  // Fetch weather with concurrency limiting to reduce met.no rate-limit risk.
+  const weatherMap = await fetchMultipleLocations(fetchList, 4);
 
   // Score each zone using checkpoint weather
   const zoneScores = [];
@@ -209,12 +373,12 @@ export async function generatePlan(targetDate) {
     const wr = weatherMap.get(cp.id);
     if (!wr || !wr.data) continue;
 
-    const evening = extractEveningForecast(wr.data, dateStr);
+    const evening = extractEveningForecast(wr.data, dateStr, 18, 3, opts.timeZone);
     const ws = scoreWeather(evening);
     const zone = ZONES[cp.zone];
     if (!zone) continue;
 
-    const zoneScore = scoreZone(cp.zone, ws, zone);
+    const zoneScore = scoreZone(cp.zone, ws, zone, opts);
     zoneScores.push({
       zoneCode: cp.zone,
       zone,
@@ -228,12 +392,12 @@ export async function generatePlan(targetDate) {
   const { primary, backupA, backupB } = selectPlans(zoneScores);
 
   // Pick best specific locations using unified weather map
-  const primaryLoc = primary ? pickBestLocation(primary.zone, weatherMap, dateStr) : null;
-  const backupALoc = backupA ? pickBestLocation(backupA.zone, weatherMap, dateStr) : null;
-  const backupBLoc = backupB ? pickBestLocation(backupB.zone, weatherMap, dateStr) : null;
+  const primaryLoc = primary ? pickBestLocation(primary.zone, weatherMap, dateStr, opts.timeZone) : null;
+  const backupALoc = backupA ? pickBestLocation(backupA.zone, weatherMap, dateStr, opts.timeZone) : null;
+  const backupBLoc = backupB ? pickBestLocation(backupB.zone, weatherMap, dateStr, opts.timeZone) : null;
 
   // Get dark window
-  const darkWindow = getDarkWindow(year, month, day, TROMSO_LAT, TROMSO_LON);
+  const darkWindow = getDarkWindow(year, month, day, TROMSO_LAT, TROMSO_LON, opts.timeZone);
 
   // Get confidence
   const confidence = getConfidence(primary, aurora);
@@ -248,25 +412,38 @@ export async function generatePlan(targetDate) {
     wind: zs.weatherScore.avgWind,
     temp: zs.weatherScore.tempC,
     score: zs.score.total,
-    verdict: classifyCheckpoint(zs.weatherScore),
+    verdict: zs.score.excluded ? 'EXCL' : classifyCheckpoint(zs.weatherScore),
+    excluded: zs.score.excluded,
+    exclusionReasons: zs.score.exclusionReasons,
+    breakdown: zs.score.breakdown,
   }));
 
   // Calculate timeline
   const primaryDriveMin = primary ? (primary.zone.driveMinutes[0] + primary.zone.driveMinutes[1]) / 2 : 45;
   const departHour = Math.max(17, parseInt(darkWindow.darkStart) - 1);
   const arriveHour = departHour + Math.ceil(primaryDriveMin / 60);
-  const nextDay = new Date(dateStr);
-  nextDay.setUTCDate(nextDay.getUTCDate() + 1);
-  const nextDateStr = nextDay.toISOString().slice(0, 10);
+  const nextDateStr = addDaysToDateStr(dateStr, 1);
 
   // Road safety assessment
   const roadRisk = assessRoadRisk(zoneScores);
+
+  const selectedLocationIds = new Set([primaryLoc?.id, backupALoc?.id, backupBLoc?.id].filter(Boolean));
+  const explorer = buildExplorer(dateStr, weatherMap, opts, selectedLocationIds);
 
   // Build the full plan object
   return {
     date: dateStr,
     generatedAt: new Date().toISOString(),
     darkWindow,
+    settings: {
+      maxDriveMinutes: opts.maxDriveMinutes,
+      driveLimitMode: opts.driveLimitMode,
+      winterComfort: opts.winterComfort,
+      includeBorderCrossing: opts.includeBorderCrossing,
+      includeFerry: opts.includeFerry,
+      timeZone: opts.timeZone,
+    },
+    explorer,
 
     // Section 1: Tonight at a glance
     atAGlance: {
@@ -297,13 +474,13 @@ export async function generatePlan(targetDate) {
       bestWindow: `${darkWindow.darkStart} - 01:00`,
       repositionTrigger: '22:00 (if primary not working, switch to backup)',
       giveUp: '02:00 (fatigue safety - begin return)',
-      // Epoch timestamps for frontend countdown timer (CET = UTC+1)
+      // Epoch timestamps for frontend countdown timer (timezone-aware; handles DST)
       epochs: {
-        forecastCheck: new Date(`${dateStr}T14:00:00Z`).getTime(),  // 15:00 CET
-        finalCommit: new Date(`${dateStr}T18:00:00Z`).getTime(),    // 19:00 CET
-        depart: new Date(`${dateStr}T${String(departHour - 1).padStart(2, '0')}:00:00Z`).getTime(),
-        repositionTrigger: new Date(`${dateStr}T21:00:00Z`).getTime(), // 22:00 CET
-        giveUp: new Date(`${nextDateStr}T01:00:00Z`).getTime(),       // 02:00 CET next day
+        forecastCheck: zonedTimeToUtcMs(dateStr, '15:00', opts.timeZone),
+        finalCommit: zonedTimeToUtcMs(dateStr, '19:00', opts.timeZone),
+        depart: zonedTimeToUtcMs(dateStr, `${String(departHour).padStart(2, '0')}:00`, opts.timeZone),
+        repositionTrigger: zonedTimeToUtcMs(dateStr, '22:00', opts.timeZone),
+        giveUp: zonedTimeToUtcMs(nextDateStr, '02:00', opts.timeZone),
       },
     },
 

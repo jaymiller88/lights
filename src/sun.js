@@ -2,6 +2,8 @@
 // Based on NOAA solar calculations
 // Provides sunset, sunrise, and twilight times
 
+import { getZonedParts } from './timezone.js';
+
 const DEG = Math.PI / 180;
 const RAD = 180 / Math.PI;
 
@@ -88,34 +90,33 @@ export function getSunTimes(year, month, day, lat, lon) {
 }
 
 // Format time in local Norway time (UTC+1 in winter CET)
-export function utcToLocalNorway(utcTime, offsetHours = 1) {
+function utcClockToZonedTime(year, month, day, utcTime, timeZone) {
   if (!utcTime) return null;
-  let h = utcTime.hours + offsetHours;
-  let m = utcTime.minutes;
-  if (h >= 24) h -= 24;
-  if (h < 0) h += 24;
+  const d = new Date(Date.UTC(year, month - 1, day, utcTime.hours, utcTime.minutes, 0));
+  const p = getZonedParts(d, timeZone);
   return {
-    hours: h,
-    minutes: m,
-    formatted: `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`,
+    hours: p.hour,
+    minutes: p.minute,
+    formatted: `${String(p.hour).padStart(2, '0')}:${String(p.minute).padStart(2, '0')}`,
   };
 }
 
 // Get dark window for aurora watching
-export function getDarkWindow(year, month, day, lat, lon) {
+export function getDarkWindow(year, month, day, lat, lon, timeZone = 'Europe/Oslo') {
   const times = getSunTimes(year, month, day, lat, lon);
 
-  const nauticalDusk = utcToLocalNorway(times.nauticalDusk);
-  const nauticalDawn = utcToLocalNorway(times.nauticalDawn);
-  const sunset = utcToLocalNorway(times.sunset);
-  const sunrise = utcToLocalNorway(times.sunrise);
+  const nauticalDusk = utcClockToZonedTime(year, month, day, times.nauticalDusk, timeZone);
+  const nauticalDawn = utcClockToZonedTime(year, month, day, times.nauticalDawn, timeZone);
+  const sunset = utcClockToZonedTime(year, month, day, times.sunset, timeZone);
+  const sunrise = utcClockToZonedTime(year, month, day, times.sunrise, timeZone);
 
   // Dark enough for aurora starts ~30 min after nautical dusk (sun at -12°)
   // In February in Tromsø, this is typically around 17:00-18:00
   let darkStart = nauticalDusk;
   if (!darkStart && sunset) {
     // If nautical dusk doesn't exist (polar night), use sunset + 1h or default
-    darkStart = { hours: sunset.hours + 1, minutes: sunset.minutes, formatted: '' };
+    const h = (sunset.hours + 1) % 24;
+    darkStart = { hours: h, minutes: sunset.minutes, formatted: '' };
   }
   if (!darkStart) {
     // Polar night - it's dark all afternoon
@@ -125,7 +126,8 @@ export function getDarkWindow(year, month, day, lat, lon) {
 
   let darkEnd = nauticalDawn;
   if (!darkEnd && sunrise) {
-    darkEnd = { hours: sunrise.hours - 1, minutes: sunrise.minutes, formatted: '' };
+    const h = (sunrise.hours - 1 + 24) % 24;
+    darkEnd = { hours: h, minutes: sunrise.minutes, formatted: '' };
   }
   if (!darkEnd) {
     darkEnd = { hours: 10, minutes: 0, formatted: '10:00' };

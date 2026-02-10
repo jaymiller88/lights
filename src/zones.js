@@ -259,6 +259,7 @@ export const WEATHER_CHECKPOINTS = [
   { id: 'skibotn', name: 'Skibotn', lat: 69.3833, lon: 20.2333, zone: 'SE' },
   { id: 'bardufoss', name: 'Bardufoss', lat: 69.0667, lon: 18.5333, zone: 'S' },
   { id: 'kilpisjarvi', name: 'Kilpisjärvi', lat: 69.0500, lon: 20.8000, zone: 'F' },
+  { id: 'mefjordvaer', name: 'Mefjordvær (Senja)', lat: 69.4167, lon: 17.1833, zone: 'SW' },
 ];
 
 // Cloud regime groupings for backup diversity
