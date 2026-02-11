@@ -1,14 +1,11 @@
 // Aurora chase plan generation engine
 // Implements the scoring algorithm and generates the full structured plan
 
-import { ZONES, WEATHER_CHECKPOINTS, getCloudRegime, getAllLocations } from './zones.js';
+import { ZONES, WEATHER_CHECKPOINTS, CLOUD_REGIMES, TROMSO_CENTER, getCloudRegime, getAllLocations } from './zones.js';
 import { fetchMultipleLocations, extractEveningForecast, scoreWeather } from './weather.js';
 import { getAuroraSummary } from './aurora.js';
 import { getDarkWindow } from './sun.js';
 import { addDaysToDateStr, zonedTimeToUtcMs } from './timezone.js';
-
-const TROMSO_LAT = 69.6496;
-const TROMSO_LON = 18.9560;
 
 function normalizeOptions(options = {}) {
   const maxDriveMinutesRaw = options.maxDriveMinutes;
@@ -34,6 +31,17 @@ function normalizeOptions(options = {}) {
     includeFerry,
     timeZone,
     debug,
+    // Pass-through dynamic location data (undefined if not provided)
+    zones: options.zones,
+    checkpoints: options.checkpoints,
+    allLocations: options.allLocations,
+    cloudRegimes: options.cloudRegimes,
+    centerLat: options.centerLat,
+    centerLon: options.centerLon,
+    cityName: options.cityName,
+    auroraLatitude: options.auroraLatitude,
+    auroraNote: options.auroraNote,
+    regionSafetyNotes: options.regionSafetyNotes,
   };
 }
 
@@ -113,7 +121,7 @@ function scoreZone(zoneCode, weatherScore, zone, options = {}) {
 }
 
 // Select Primary + Backup A + Backup B
-function selectPlans(zoneScoredList) {
+function selectPlans(zoneScoredList, cloudRegimes) {
   // Only consider zones with valid weather data and positive scores
   const validZones = zoneScoredList.filter(z => z.score.total > 0 && z.weatherScore.valid);
   const sorted = [...validZones].sort((a, b) => b.score.total - a.score.total);
@@ -121,12 +129,12 @@ function selectPlans(zoneScoredList) {
   if (sorted.length === 0) return { primary: null, backupA: null, backupB: null };
 
   const primary = sorted[0];
-  const primaryRegime = getCloudRegime(primary.zoneCode);
+  const primaryRegime = getCloudRegime(primary.zoneCode, cloudRegimes);
 
   // Backup A: best score from a DIFFERENT cloud regime
   const backupA = sorted.find(z =>
     z.zoneCode !== primary.zoneCode &&
-    getCloudRegime(z.zoneCode) !== primaryRegime
+    getCloudRegime(z.zoneCode, cloudRegimes) !== primaryRegime
   ) || sorted.find(z => z.zoneCode !== primary.zoneCode) || null;
 
   // Backup B: closest safe option (prefer Zone 0 or Zone W), must have valid data
@@ -181,11 +189,27 @@ function formatDestination(plan, weatherScore, location, zone, isCondensed = fal
 
   const warnings = [];
   if (zone.requiresBorderCrossing) {
-    warnings.push('BORDER CROSSING: Confirm rental car is allowed across border. Bring passport/ID. Finland is +1 hour (EET).');
+    warnings.push('BORDER CROSSING: Confirm rental car is allowed across border. Bring passport/ID.');
   }
   if (zone.mayRequireFerry) {
     warnings.push('FERRY MAY BE NEEDED: Check ferry schedule. Wind/exposure risk. Consider non-ferry route.');
   }
+  if (zone.winterRoadWarning) {
+    warnings.push(`ROAD WARNING: ${zone.winterRoadWarning}`);
+  }
+  if (zone.cellCoverage === 'none' || zone.cellCoverage === 'poor') {
+    warnings.push(`LIMITED CELL COVERAGE: ${zone.cellCoverage} signal in this area. Download offline maps before departing.`);
+  }
+  if (location.safetyNotes) {
+    warnings.push(location.safetyNotes);
+  }
+
+  // Build travel safety summary
+  const travelSafety = [];
+  if (zone.roadType) travelSafety.push(`Road: ${zone.roadType}`);
+  if (zone.cellCoverage) travelSafety.push(`Cell: ${zone.cellCoverage}`);
+  if (zone.nearestServices) travelSafety.push(`Services: ${zone.nearestServices}`);
+  if (zone.safetyNotes) travelSafety.push(zone.safetyNotes);
 
   return {
     zone: `Zone ${zone.code} - ${zone.name}`,
@@ -200,6 +224,7 @@ function formatDestination(plan, weatherScore, location, zone, isCondensed = fal
     ],
     parking: location.parking,
     notes: location.notes,
+    travelSafety,
     warnings,
     arrivalChecklist: [
       'Turn off headlights / park facing away from viewing direction',
@@ -227,12 +252,13 @@ function classifyCheckpoint(ws) {
   return 'MAYBE';
 }
 
-function buildExplorer(dateStr, weatherMap, options, selectedLocationIds = new Set()) {
+function buildExplorer(dateStr, weatherMap, options, selectedLocationIds = new Set(), dynamicZones) {
   const opts = normalizeOptions(options);
   const locations = [];
   const zones = [];
+  const zonesData = dynamicZones || ZONES;
 
-  for (const zone of Object.values(ZONES)) {
+  for (const zone of Object.values(zonesData)) {
     let best = null;
     for (const loc of zone.locations) {
       const wr = weatherMap.get(loc.id);
@@ -242,6 +268,10 @@ function buildExplorer(dateStr, weatherMap, options, selectedLocationIds = new S
       const warnings = [];
       if (zone.requiresBorderCrossing) warnings.push('Border crossing required');
       if (zone.mayRequireFerry) warnings.push('Ferry may be required');
+      if (zone.winterRoadWarning) warnings.push(zone.winterRoadWarning);
+      if (zone.cellCoverage === 'none' || zone.cellCoverage === 'poor') {
+        warnings.push(`Limited cell coverage (${zone.cellCoverage})`);
+      }
 
       const row = {
         id: loc.id,
@@ -251,9 +281,14 @@ function buildExplorer(dateStr, weatherMap, options, selectedLocationIds = new S
         anchor: loc.anchor,
         parking: loc.parking,
         notes: loc.notes,
+        safetyNotes: loc.safetyNotes || null,
         driveMinutes: zone.driveMinutes,
         driveTime: `${zone.driveMinutes[0]}-${zone.driveMinutes[1]} min`,
         lightPollution: zone.lightPollution,
+        roadType: zone.roadType || null,
+        cellCoverage: zone.cellCoverage || null,
+        nearestServices: zone.nearestServices || null,
+        zoneSafetyNotes: zone.safetyNotes || null,
         weather: {
           cloudTotal: ws.avgCloudTotal ?? null,
           cloudLow: ws.avgCloudLow ?? null,
@@ -346,11 +381,14 @@ export async function generatePlan(targetDate, options = {}) {
     };
   }
 
-  // Build deduplicated location list: checkpoints + all zone locations
-  // The cache in weather.js deduplicates by (lat,lon) so overlapping coords are cheap,
-  // but we avoid creating redundant fetch promises here too.
-  const checkpoints = WEATHER_CHECKPOINTS;
-  const allLocations = getAllLocations();
+  // Use dynamic zones/checkpoints if provided, otherwise use Tromsø defaults
+  const activeZones = opts.zones || ZONES;
+  const checkpoints = opts.checkpoints || WEATHER_CHECKPOINTS;
+  const allLocations = opts.allLocations || getAllLocations();
+  const cloudRegimes = opts.cloudRegimes || CLOUD_REGIMES;
+  const centerLat = opts.centerLat ?? TROMSO_CENTER.lat;
+  const centerLon = opts.centerLon ?? TROMSO_CENTER.lon;
+  const cityName = opts.cityName || 'Tromsø';
   const seen = new Set();
   const fetchList = [];
   // Checkpoints first (they're used for scoring)
@@ -375,7 +413,7 @@ export async function generatePlan(targetDate, options = {}) {
 
     const evening = extractEveningForecast(wr.data, dateStr, 18, 3, opts.timeZone);
     const ws = scoreWeather(evening);
-    const zone = ZONES[cp.zone];
+    const zone = activeZones[cp.zone];
     if (!zone) continue;
 
     const zoneScore = scoreZone(cp.zone, ws, zone, opts);
@@ -389,7 +427,7 @@ export async function generatePlan(targetDate, options = {}) {
   }
 
   // Select plans
-  const { primary, backupA, backupB } = selectPlans(zoneScores);
+  const { primary, backupA, backupB } = selectPlans(zoneScores, cloudRegimes);
 
   // Pick best specific locations using unified weather map
   const primaryLoc = primary ? pickBestLocation(primary.zone, weatherMap, dateStr, opts.timeZone) : null;
@@ -397,7 +435,7 @@ export async function generatePlan(targetDate, options = {}) {
   const backupBLoc = backupB ? pickBestLocation(backupB.zone, weatherMap, dateStr, opts.timeZone) : null;
 
   // Get dark window
-  const darkWindow = getDarkWindow(year, month, day, TROMSO_LAT, TROMSO_LON, opts.timeZone);
+  const darkWindow = getDarkWindow(year, month, day, centerLat, centerLon, opts.timeZone);
 
   // Get confidence
   const confidence = getConfidence(primary, aurora);
@@ -428,12 +466,16 @@ export async function generatePlan(targetDate, options = {}) {
   const roadRisk = assessRoadRisk(zoneScores);
 
   const selectedLocationIds = new Set([primaryLoc?.id, backupALoc?.id, backupBLoc?.id].filter(Boolean));
-  const explorer = buildExplorer(dateStr, weatherMap, opts, selectedLocationIds);
+  const explorer = buildExplorer(dateStr, weatherMap, opts, selectedLocationIds, activeZones);
 
   // Build the full plan object
   return {
     date: dateStr,
     generatedAt: new Date().toISOString(),
+    cityName,
+    auroraLatitude: opts.auroraLatitude || null,
+    auroraNote: opts.auroraNote || null,
+    regionSafetyNotes: opts.regionSafetyNotes || null,
     darkWindow,
     settings: {
       maxDriveMinutes: opts.maxDriveMinutes,
@@ -449,8 +491,11 @@ export async function generatePlan(targetDate, options = {}) {
     atAGlance: {
       skyWinner: primary ? `Zone ${primary.zoneCode} (${primary.zone.name}) - ${primary.weatherScore.avgCloudTotal}% cloud cover, ${primary.weatherScore.avgCloudLow}% low cloud` : 'Unable to determine - check weather manually',
       auroraPotential: `Kp ${aurora.tonightKp.max ?? '?'} forecast (${aurora.activityLevel}). ${aurora.visibility}`,
+      auroraNote: opts.auroraNote || null,
+      auroraLatitude: opts.auroraLatitude || null,
       tempWind: primary ? `${primary.weatherScore.tempC}°C at destination, wind ${primary.weatherScore.avgWind}m/s (gusts ${primary.weatherScore.maxGust}m/s)` : 'Check weather manually',
       roadRisk: roadRisk.summary,
+      regionSafetyNotes: opts.regionSafetyNotes || null,
       confidence: `${confidence.level} - ${confidence.reason}`,
     },
 

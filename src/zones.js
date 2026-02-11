@@ -269,10 +269,15 @@ export const CLOUD_REGIMES = {
   inland_south: ['S'],
 };
 
-// Get all unique locations for weather fetching
+// Get all unique locations for weather fetching (Tromsø default)
 export function getAllLocations() {
+  return buildAllLocations(ZONES);
+}
+
+// Build all locations from any zone set
+export function buildAllLocations(zones) {
   const locations = [];
-  for (const zone of Object.values(ZONES)) {
+  for (const zone of Object.values(zones)) {
     for (const loc of zone.locations) {
       locations.push({
         ...loc,
@@ -286,9 +291,27 @@ export function getAllLocations() {
   return locations;
 }
 
-// Get the cloud regime for a zone code
-export function getCloudRegime(zoneCode) {
-  for (const [regime, zones] of Object.entries(CLOUD_REGIMES)) {
+// Build weather checkpoints from any zone set (picks first location per zone)
+export function buildCheckpoints(zones) {
+  const checkpoints = [];
+  for (const [code, zone] of Object.entries(zones)) {
+    const loc = zone.locations[0];
+    if (!loc) continue;
+    checkpoints.push({
+      id: loc.id,
+      name: `${loc.name} (${zone.name})`,
+      lat: loc.lat,
+      lon: loc.lon,
+      zone: code,
+    });
+  }
+  return checkpoints;
+}
+
+// Get the cloud regime for a zone code (checks given regimes or falls back to default)
+export function getCloudRegime(zoneCode, cloudRegimes) {
+  const regimes = cloudRegimes || CLOUD_REGIMES;
+  for (const [regime, zones] of Object.entries(regimes)) {
     if (zones.includes(zoneCode)) return regime;
   }
   return 'unknown';

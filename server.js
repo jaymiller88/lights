@@ -3,6 +3,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { generatePlan, condensePlan, generateUpdateResponse, diagnoseCamera } from './src/planner.js';
 import { getZonedDateStr } from './src/timezone.js';
+import { generateLocationsForCity, AI_ENABLED } from './src/ai.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -25,9 +26,38 @@ function parseBool(val, defaultValue) {
   return defaultValue;
 }
 
+// GET /api/locations?city=Alta&lat=69.97&lon=23.27 - Get AI-generated locations for a city
+app.get('/api/locations', async (req, res) => {
+  try {
+    const city = (req.query.city || '').trim();
+    const lat = req.query.lat !== undefined ? parseFloat(req.query.lat) : undefined;
+    const lon = req.query.lon !== undefined ? parseFloat(req.query.lon) : undefined;
+
+    if (!city) {
+      return res.status(400).json({ ok: false, error: 'city parameter is required' });
+    }
+
+    const result = await generateLocationsForCity(city, lat, lon);
+    res.json({
+      ok: true,
+      zones: result.zones,
+      checkpoints: result.checkpoints,
+      center: { lat: result.centerLat, lon: result.centerLon },
+      timeZone: result.timeZone,
+      cityName: result.cityName,
+      source: result.source,
+      aiEnabled: AI_ENABLED,
+    });
+  } catch (err) {
+    console.error('Location generation error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // GET /api/plan - Generate tonight's aurora plan
 app.get('/api/plan', async (req, res) => {
   try {
+    const city = (req.query.city || '').trim();
     const date = req.query.date || getZonedDateStr(new Date(), 'Europe/Oslo');
 
     const maxDriveMinutes = req.query.maxDriveMinutes !== undefined ? parseInt(req.query.maxDriveMinutes, 10) : undefined;
@@ -40,6 +70,7 @@ app.get('/api/plan', async (req, res) => {
 
     const key = JSON.stringify({
       date,
+      city,
       maxDriveMinutes: Number.isFinite(maxDriveMinutes) ? maxDriveMinutes : undefined,
       driveLimitMode,
       winterComfort,
@@ -49,7 +80,7 @@ app.get('/api/plan', async (req, res) => {
       debug,
     });
 
-    // Return cached plan if same date and less than 30 min old
+    // Return cached plan if same params and less than 30 min old
     if (cachedPlan && cachedPlanKey === key &&
         Date.now() - new Date(cachedPlan.generatedAt).getTime() < 30 * 60 * 1000) {
       return res.json({ ok: true, plan: cachedPlan, cached: true });
@@ -60,6 +91,31 @@ app.get('/api/plan', async (req, res) => {
     }
 
     generating = true;
+
+    // If city provided and AI enabled, generate dynamic locations
+    let locationOptions = {};
+    if (city && AI_ENABLED) {
+      const cityLat = req.query.lat !== undefined ? parseFloat(req.query.lat) : undefined;
+      const cityLon = req.query.lon !== undefined ? parseFloat(req.query.lon) : undefined;
+      const locResult = await generateLocationsForCity(city, cityLat, cityLon);
+      locationOptions = {
+        zones: locResult.zones,
+        checkpoints: locResult.checkpoints,
+        allLocations: locResult.allLocations,
+        cloudRegimes: locResult.cloudRegimes,
+        centerLat: locResult.centerLat,
+        centerLon: locResult.centerLon,
+        cityName: locResult.cityName,
+        auroraLatitude: locResult.auroraLatitude,
+        auroraNote: locResult.auroraNote,
+        regionSafetyNotes: locResult.regionSafetyNotes,
+      };
+      // Use AI-detected timezone if frontend didn't specify one
+      if (!timeZone && locResult.timeZone) {
+        locationOptions.timeZone = locResult.timeZone;
+      }
+    }
+
     const plan = await generatePlan(date, {
       maxDriveMinutes,
       driveLimitMode,
@@ -68,6 +124,7 @@ app.get('/api/plan', async (req, res) => {
       includeFerry,
       timeZone,
       debug,
+      ...locationOptions,
     });
     cachedPlan = plan;
     cachedPlanKey = key;

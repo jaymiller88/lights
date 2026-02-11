@@ -68,7 +68,10 @@ function updateSubtitle() {
   const origin = (userSettings.origin || 'Tromsø').trim();
   const coordRe = /^-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?$/;
   const originLabel = (userSettings.originSource === 'gps' && coordRe.test(origin)) ? 'GPS' : origin;
-  el.textContent = `${hrsLabel} • dirs: ${originLabel} • ${comfort}`;
+  // Show the active city name from the last plan if available
+  const cityName = currentPlan?.cityName;
+  const cityLabel = cityName && cityName !== origin ? ` (${cityName})` : '';
+  el.textContent = `${hrsLabel} • ${originLabel}${cityLabel} • ${comfort}`;
 }
 
 function getRecentOrigins() {
@@ -288,6 +291,15 @@ async function api(url, options = {}) {
 
 // --- Main Commands ---
 
+function detectCity(origin) {
+  const o = (origin || '').trim();
+  if (!o) return '';
+  // If it looks like GPS coordinates, it's not a city name
+  const coordRe = /^-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?$/;
+  if (coordRe.test(o)) return '';
+  return o;
+}
+
 async function runPlan() {
   showLoading(true);
   hideError();
@@ -295,6 +307,9 @@ async function runPlan() {
   setStatus('loading', 'Fetching data...');
 
   try {
+    const city = detectCity(userSettings.origin);
+    const timeZone = userSettings.detectedTimeZone || 'Europe/Oslo';
+
     // Always send settings so the backend can score/filter consistently.
     const params = new URLSearchParams({
       date: userSettings.date || todayLocalISO(),
@@ -303,13 +318,23 @@ async function runPlan() {
       winterComfort: userSettings.winterComfort || 'medium',
       includeBorderCrossing: userSettings.includeBorderCrossing ? '1' : '0',
       includeFerry: userSettings.includeFerry ? '1' : '0',
-      timeZone: 'Europe/Oslo',
+      timeZone,
     });
+    if (city) {
+      params.set('city', city);
+    }
     const data = await api(`/api/plan?${params.toString()}`);
     currentPlan = data.plan;
+
+    // Pick up AI-detected timezone for future requests
+    if (data.plan?.settings?.timeZone && data.plan.settings.timeZone !== timeZone) {
+      saveSettings({ detectedTimeZone: data.plan.settings.timeZone });
+    }
+
     renderPlan(data.plan);
     startCountdown(data.plan);
     saveLastPlan(data.plan);
+    updateSubtitle();
     setStatus('ok', data.cached ? 'Plan loaded (cached)' : 'Plan generated');
   } catch (err) {
     showError(`Failed to generate plan: ${err.message}`);
@@ -500,16 +525,19 @@ function persistSettingsFromModal() {
     : (nextOrigin === prevOrigin ? (userSettings.originSource || 'manual') : 'manual');
 
   addRecentOrigin(origin);
+  const originChanged = nextOrigin.toLowerCase() !== prevOrigin.toLowerCase();
   saveSettings({
     origin: nextOrigin,
     originSource: originSource === 'gps' ? 'gps' : 'manual',
-    originUpdatedAt: nextOrigin !== prevOrigin ? Date.now() : (userSettings.originUpdatedAt || null),
+    originUpdatedAt: originChanged ? Date.now() : (userSettings.originUpdatedAt || null),
     date,
     maxDriveMinutes: Number.isFinite(maxDriveMinutes) ? maxDriveMinutes : 180,
     driveLimitMode,
     winterComfort,
     includeBorderCrossing,
     includeFerry,
+    // Reset detected timezone when origin changes so AI can re-detect it
+    detectedTimeZone: originChanged ? undefined : userSettings.detectedTimeZone,
   });
 }
 
@@ -661,10 +689,11 @@ function startCountdown(plan) {
   if (!plan?.timeline?.epochs) return;
 
   const epochs = plan.timeline.epochs;
+  const cityName = plan.cityName || 'Tromsø';
   const events = [
     { key: 'forecastCheck', label: 'Forecast check' },
     { key: 'finalCommit', label: 'Final commit' },
-    { key: 'depart', label: 'Depart Troms\u00f8' },
+    { key: 'depart', label: `Depart ${cityName}` },
     { key: 'repositionTrigger', label: 'Reposition trigger' },
     { key: 'giveUp', label: 'Give up & return' },
   ];
@@ -721,13 +750,13 @@ function renderPlan(plan) {
   el.appendChild(renderSection(3, 'PLAN TIMELINE', renderTimeline(plan)));
 
   // Section 4: Primary Plan
-  el.appendChild(renderSection(4, 'PRIMARY PLAN', renderDestination(plan.primary, 'primary')));
+  el.appendChild(renderSection(4, 'PRIMARY PLAN', renderDestination(plan.primary, 'primary', plan)));
 
   // Section 5: Backup A
-  el.appendChild(renderSection(5, 'BACKUP A', renderDestination(plan.backupA, 'backup-a')));
+  el.appendChild(renderSection(5, 'BACKUP A', renderDestination(plan.backupA, 'backup-a', plan)));
 
   // Section 6: Backup B
-  el.appendChild(renderSection(6, 'BACKUP B', renderDestination(plan.backupB, 'backup-b')));
+  el.appendChild(renderSection(6, 'BACKUP B', renderDestination(plan.backupB, 'backup-b', plan)));
 
   // Section 7: On-Site Loop
   el.appendChild(renderSection(7, 'ON-SITE OPERATING LOOP', renderOnsiteLoop(plan), true));
@@ -800,6 +829,9 @@ function renderGlance(plan) {
   const g = plan.atAGlance;
   const confClass = g.confidence.startsWith('HIGH') ? 'confidence-high' :
                      g.confidence.startsWith('MED') ? 'confidence-med' : 'confidence-low';
+  const auroraLatClass = g.auroraLatitude === 'good' ? 'confidence-high' :
+                          g.auroraLatitude === 'moderate' ? 'confidence-med' :
+                          g.auroraLatitude ? 'confidence-low' : '';
   return `
     <ul class="glance-list">
       <li class="glance-item">
@@ -810,6 +842,12 @@ function renderGlance(plan) {
         <span class="glance-label">Aurora</span>
         <span class="glance-value">${escapeHtml(g.auroraPotential)}</span>
       </li>
+      ${g.auroraNote ? `
+        <li class="glance-item">
+          <span class="glance-label">Aurora Zone</span>
+          <span class="glance-value ${auroraLatClass}">${escapeHtml(g.auroraNote)}</span>
+        </li>
+      ` : ''}
       <li class="glance-item">
         <span class="glance-label">Temp/Wind</span>
         <span class="glance-value">${escapeHtml(g.tempWind)}</span>
@@ -818,6 +856,12 @@ function renderGlance(plan) {
         <span class="glance-label">Road Risk</span>
         <span class="glance-value">${escapeHtml(g.roadRisk)}</span>
       </li>
+      ${g.regionSafetyNotes ? `
+        <li class="glance-item">
+          <span class="glance-label">Travel Safety</span>
+          <span class="glance-value">${escapeHtml(g.regionSafetyNotes)}</span>
+        </li>
+      ` : ''}
       <li class="glance-item">
         <span class="glance-label">Confidence</span>
         <span class="glance-value ${confClass}">${escapeHtml(g.confidence)}</span>
@@ -889,10 +933,11 @@ function renderDecisionRule(plan) {
 
 function renderTimeline(plan) {
   const t = plan.timeline;
+  const cityName = plan.cityName || 'Tromsø';
   const items = [
     { time: t.forecastCheck, label: 'Forecast check + pick plan' },
     { time: t.finalCommit, label: 'Final commit check - lock in destination' },
-    { time: t.depart, label: 'Depart Troms\u00f8' },
+    { time: t.depart, label: `Depart ${cityName}` },
     { time: t.arrive, label: 'Arrive at destination' },
     { time: t.bestWindow, label: 'Best watch window' },
     { time: t.repositionTrigger, label: 'Reposition trigger (switch if needed)' },
@@ -911,13 +956,14 @@ function renderTimeline(plan) {
   `;
 }
 
-function renderDestination(dest, badgeClass) {
+function renderDestination(dest, badgeClass, plan) {
   if (!dest) return '<p class="text-muted">No destination data available.</p>';
 
   const badgeLabel = badgeClass === 'primary' ? 'PRIMARY' :
                      badgeClass === 'backup-a' ? 'BACKUP A' : 'BACKUP B';
 
   const directionsUrl = buildDirectionsUrl(userSettings?.origin, dest.anchor);
+  const cityName = plan?.cityName || 'Tromsø';
 
   // Fix #8: use data-anchor attribute instead of inline onclick
   return `
@@ -926,7 +972,7 @@ function renderDestination(dest, badgeClass) {
         <span class="dest-badge ${badgeClass}">${badgeLabel}</span>
         <span class="dest-name">${escapeHtml(dest.location)}</span>
       </div>
-      <div class="dest-zone">${escapeHtml(dest.zone)} &bull; Est. drive (from Tromsø): ${escapeHtml(dest.driveTime)}</div>
+      <div class="dest-zone">${escapeHtml(dest.zone)} &bull; Est. drive (from ${escapeHtml(cityName)}): ${escapeHtml(dest.driveTime)}</div>
 
       <div class="dest-field mt-12">
         <div class="dest-field-label">Navigation Anchor</div>
@@ -948,6 +994,15 @@ function renderDestination(dest, badgeClass) {
           ${dest.whyThisSpot.map(w => `<li>${escapeHtml(w)}</li>`).join('')}
         </ul>
       </div>
+
+      ${dest.travelSafety?.length ? `
+        <div class="dest-field">
+          <div class="dest-field-label">Travel Safety</div>
+          <ul class="plan-list">
+            ${dest.travelSafety.map(s => `<li>${escapeHtml(s)}</li>`).join('')}
+          </ul>
+        </div>
+      ` : ''}
 
       <div class="dest-field">
         <div class="dest-field-label">Parking</div>
@@ -1142,11 +1197,12 @@ function renderExplorer(plan) {
     `;
   }).join('');
 
+  const cityName = currentPlan?.cityName || 'Tromsø';
   return `
     <div class="text-sm text-muted mb-8">
       Compare all scored locations (same scoring as the plan). Filters:
       max drive ${escapeHtml(maxDrive)}, mode ${escapeHtml(mode)}, comfort ${escapeHtml(comfort)}, border ${escapeHtml(border)}, ferry ${escapeHtml(ferry)}.
-      Drive times shown are zone estimates from Tromsø; use Directions for your actual start.
+      Drive times shown are zone estimates from ${escapeHtml(cityName)}; use Directions for your actual start.
     </div>
     <div style="overflow-x:auto">
       <table class="explorer-table">
@@ -1203,7 +1259,7 @@ function showExplorerDetails(locId) {
         <li>Precip: ${escapeHtml(loc.weather?.precip)}mm max</li>
         <li>Wind: ${escapeHtml(loc.weather?.wind)}m/s avg (gusts ${escapeHtml(loc.weather?.gust)}m/s)</li>
         <li>Temp: ${escapeHtml(loc.weather?.tempC)}°C</li>
-        <li>Drive (est. from Tromsø): ${escapeHtml(loc.driveTime)}</li>
+        <li>Drive (est. from ${escapeHtml(currentPlan?.cityName || 'Tromsø')}): ${escapeHtml(loc.driveTime)}</li>
         <li>Score: ${escapeHtml(loc.score?.total)}</li>
       </ul>
     </div>
@@ -1217,6 +1273,18 @@ function showExplorerDetails(locId) {
         <li>Over-limit penalty: ${escapeHtml(b.overLimitPenalty)}</li>
       </ul>
     </div>
+    ${(loc.roadType || loc.cellCoverage || loc.nearestServices || loc.zoneSafetyNotes || loc.safetyNotes) ? `
+      <div class="dest-field">
+        <div class="dest-field-label">Travel Safety</div>
+        <ul class="plan-list">
+          ${loc.roadType ? `<li>Road: ${escapeHtml(loc.roadType)}</li>` : ''}
+          ${loc.cellCoverage ? `<li>Cell coverage: ${escapeHtml(loc.cellCoverage)}</li>` : ''}
+          ${loc.nearestServices ? `<li>Services: ${escapeHtml(loc.nearestServices)}</li>` : ''}
+          ${loc.zoneSafetyNotes ? `<li>${escapeHtml(loc.zoneSafetyNotes)}</li>` : ''}
+          ${loc.safetyNotes ? `<li>${escapeHtml(loc.safetyNotes)}</li>` : ''}
+        </ul>
+      </div>
+    ` : ''}
     <div class="dest-field">
       <div class="dest-field-label">Parking</div>
       <div class="dest-field-value">${escapeHtml(loc.parking || '')}</div>
