@@ -1107,7 +1107,26 @@ body {
   #app { padding: 0 8px 60px; }
   .header-title h1 { font-size: 0.95rem; }
   .cmd-btn { padding: 8px 12px; font-size: 0.75rem; }
-  .plan-section-body { padding: 12px; }
+  .plan-section-body { padding: 12px; overflow-x: auto; }
+
+  /* Tables: allow horizontal scroll instead of overflowing the viewport */
+  .checkpoint-table,
+  .explorer-table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Glance list: stack labels above values on narrow screens */
+  .glance-label { min-width: 70px; }
+
+  /* Countdown bar: wrap on narrow screens */
+  .countdown-bar { flex-wrap: wrap; gap: 6px; padding: 10px 12px; }
+  .countdown-label { min-width: auto; }
+  .countdown-time { min-width: auto; }
+
+  /* Anchor copy: full width tap target */
+  .anchor-copy { width: 100%; justify-content: center; }
 }
 
 /* Countdown timer bar */
