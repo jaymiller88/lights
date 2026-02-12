@@ -888,10 +888,10 @@ function renderDecisionRule(plan) {
     return `
       <tr title="${escapeHtml(title)}">
         <td>${escapeHtml(cp.name)}</td>
-        <td>${cp.cloudTotal}%</td>
-        <td>${cp.cloudLow}%</td>
-        <td>${cp.precip}mm</td>
-        <td>${cp.wind}m/s</td>
+        <td>${cp.cloudTotal ?? '—'}%</td>
+        <td>${cp.cloudLow ?? '—'}%</td>
+        <td>${cp.precip ?? '—'}mm</td>
+        <td>${cp.wind ?? '—'}m/s</td>
         <td><span class="${verdictClass}" style="font-weight:700">${escapeHtml(verdict)}</span></td>
         <td>
           <div class="score-bar ${scoreClass}">

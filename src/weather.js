@@ -128,7 +128,12 @@ export function extractEveningForecast(weatherData, targetDate, startHour = 18, 
 // Calculate aggregate scores for a location's evening forecast
 export function scoreWeather(eveningData) {
   if (!eveningData || eveningData.length === 0) {
-    return { cloudScore: 0, precipScore: 0, windScore: 0, tempC: null, total: 0, valid: false };
+    return {
+      cloudScore: 0, precipScore: 0, windScore: 0,
+      avgCloudTotal: null, avgCloudLow: null,
+      avgWind: null, maxGust: null, maxPrecip: null,
+      tempC: null, total: 0, valid: false,
+    };
   }
 
   // Focus on prime aurora hours: 21:00-01:00 local
