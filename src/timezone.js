@@ -1,7 +1,7 @@
 // Minimal timezone helpers (no external deps).
 // We use IANA tz names (e.g., "Europe/Oslo") so DST is handled correctly.
 
-const DEFAULT_TIME_ZONE = 'Europe/Oslo';
+const DEFAULT_TIME_ZONE = 'Atlantic/Reykjavik';
 
 function dtf(timeZone) {
   return new Intl.DateTimeFormat('en-US', {

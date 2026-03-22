@@ -21,7 +21,7 @@ function todayLocalISO() {
 
 function defaultSettings() {
   return {
-    origin: 'Tromsø',
+    origin: 'Reykjavík',
     originSource: 'default', // default | manual | gps
     originUpdatedAt: null,
     date: todayLocalISO(),
@@ -43,7 +43,7 @@ function loadSettings() {
   const merged = { ...defaultSettings(), ...(s || {}) };
   // Backward-compat: infer originSource for older saved settings.
   const o = (merged.origin || '').trim();
-  const isDefaultOrigin = o.toLowerCase() === 'tromsø'.toLowerCase() || o.toLowerCase() === 'tromso';
+  const isDefaultOrigin = o.toLowerCase() === 'reykjavík' || o.toLowerCase() === 'reykjavik' || o.toLowerCase() === 'tromsø' || o.toLowerCase() === 'tromso';
   if (merged.originSource === 'default' && o && !isDefaultOrigin) {
     merged.originSource = 'manual';
   }
@@ -65,7 +65,7 @@ function updateSubtitle() {
   const hrsLabel = hrs >= 3 ? `${hrs}h radius` : `${hrs}h max`;
   const comfort = userSettings.winterComfort === 'low' ? 'cautious' :
                   userSettings.winterComfort === 'high' ? 'confident' : 'balanced';
-  const origin = (userSettings.origin || 'Tromsø').trim();
+  const origin = (userSettings.origin || 'Reykjavík').trim();
   const coordRe = /^-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?$/;
   const originLabel = (userSettings.originSource === 'gps' && coordRe.test(origin)) ? 'GPS' : origin;
   // Show the active city name from the last plan if available
@@ -366,9 +366,11 @@ function showSettingsModal() {
   const recents = getRecentOrigins();
 
   const originSuggestions = [
+    'Reykjavík',
+    'Reykjavík city center',
+    'Keflavík airport',
     'Tromsø',
     'Tromsø city center',
-    'Tromsø airport',
     ...favs,
     ...recents,
   ].filter(Boolean);
@@ -519,7 +521,7 @@ function persistSettingsFromModal() {
   const includeFerry = !!document.getElementById('settings-ferry')?.checked;
 
   const prevOrigin = (userSettings.origin || '').trim();
-  const nextOrigin = (origin.trim() || 'Tromsø');
+  const nextOrigin = (origin.trim() || 'Reykjavík');
   const originSource = originEl?.dataset?.originSource
     ? originEl.dataset.originSource
     : (nextOrigin === prevOrigin ? (userSettings.originSource || 'manual') : 'manual');
@@ -689,7 +691,7 @@ function startCountdown(plan) {
   if (!plan?.timeline?.epochs) return;
 
   const epochs = plan.timeline.epochs;
-  const cityName = plan.cityName || 'Tromsø';
+  const cityName = plan.cityName || 'Reykjavík';
   const events = [
     { key: 'forecastCheck', label: 'Forecast check' },
     { key: 'finalCommit', label: 'Final commit' },
@@ -933,7 +935,7 @@ function renderDecisionRule(plan) {
 
 function renderTimeline(plan) {
   const t = plan.timeline;
-  const cityName = plan.cityName || 'Tromsø';
+  const cityName = plan.cityName || 'Reykjavík';
   const items = [
     { time: t.forecastCheck, label: 'Forecast check + pick plan' },
     { time: t.finalCommit, label: 'Final commit check - lock in destination' },
@@ -985,7 +987,7 @@ function renderDestination(dest, badgeClass, plan) {
           <a class="nav-btn" href="${escapeHtml(directionsUrl)}" target="_blank" rel="noopener">Open driving directions</a>
           <button class="nav-btn nav-secondary" data-copy-text="${escapeHtml(directionsUrl)}">Copy link</button>
         </div>
-        <div class="text-sm text-muted mt-8">Origin: ${escapeHtml((userSettings?.origin || 'Tromsø').trim())}</div>
+        <div class="text-sm text-muted mt-8">Origin: ${escapeHtml((userSettings?.origin || 'Reykjavík').trim())}</div>
       </div>
 
       <div class="dest-field">
@@ -1197,7 +1199,7 @@ function renderExplorer(plan) {
     `;
   }).join('');
 
-  const cityName = currentPlan?.cityName || 'Tromsø';
+  const cityName = currentPlan?.cityName || 'Reykjavík';
   return `
     <div class="text-sm text-muted mb-8">
       Compare all scored locations (same scoring as the plan). Filters:
@@ -1259,7 +1261,7 @@ function showExplorerDetails(locId) {
         <li>Precip: ${escapeHtml(loc.weather?.precip)}mm max</li>
         <li>Wind: ${escapeHtml(loc.weather?.wind)}m/s avg (gusts ${escapeHtml(loc.weather?.gust)}m/s)</li>
         <li>Temp: ${escapeHtml(loc.weather?.tempC)}°C</li>
-        <li>Drive (est. from ${escapeHtml(currentPlan?.cityName || 'Tromsø')}): ${escapeHtml(loc.driveTime)}</li>
+        <li>Drive (est. from ${escapeHtml(currentPlan?.cityName || 'Reykjavík')}): ${escapeHtml(loc.driveTime)}</li>
         <li>Score: ${escapeHtml(loc.score?.total)}</li>
       </ul>
     </div>

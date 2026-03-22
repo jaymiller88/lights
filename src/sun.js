@@ -1,4 +1,4 @@
-// Sun position calculator for Tromsø
+// Sun position calculator for aurora viewing locations
 // Based on NOAA solar calculations
 // Provides sunset, sunrise, and twilight times
 
@@ -89,7 +89,7 @@ export function getSunTimes(year, month, day, lat, lon) {
   };
 }
 
-// Format time in local Norway time (UTC+1 in winter CET)
+// Format UTC clock time to a given timezone
 function utcClockToZonedTime(year, month, day, utcTime, timeZone) {
   if (!utcTime) return null;
   const d = new Date(Date.UTC(year, month - 1, day, utcTime.hours, utcTime.minutes, 0));
@@ -102,7 +102,7 @@ function utcClockToZonedTime(year, month, day, utcTime, timeZone) {
 }
 
 // Get dark window for aurora watching
-export function getDarkWindow(year, month, day, lat, lon, timeZone = 'Europe/Oslo') {
+export function getDarkWindow(year, month, day, lat, lon, timeZone = 'Atlantic/Reykjavik') {
   const times = getSunTimes(year, month, day, lat, lon);
 
   const nauticalDusk = utcClockToZonedTime(year, month, day, times.nauticalDusk, timeZone);
@@ -111,7 +111,7 @@ export function getDarkWindow(year, month, day, lat, lon, timeZone = 'Europe/Osl
   const sunrise = utcClockToZonedTime(year, month, day, times.sunrise, timeZone);
 
   // Dark enough for aurora starts ~30 min after nautical dusk (sun at -12°)
-  // In February in Tromsø, this is typically around 17:00-18:00
+  // At high latitudes, this is typically around 17:00-18:00 in winter
   let darkStart = nauticalDusk;
   if (!darkStart && sunset) {
     // If nautical dusk doesn't exist (polar night), use sunset + 1h or default

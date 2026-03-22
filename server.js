@@ -58,7 +58,7 @@ app.get('/api/locations', async (req, res) => {
 app.get('/api/plan', async (req, res) => {
   try {
     const city = (req.query.city || '').trim();
-    const date = req.query.date || getZonedDateStr(new Date(), 'Europe/Oslo');
+    const date = req.query.date || getZonedDateStr(new Date(), 'Atlantic/Reykjavik');
 
     const maxDriveMinutes = req.query.maxDriveMinutes !== undefined ? parseInt(req.query.maxDriveMinutes, 10) : undefined;
     const driveLimitMode = req.query.driveLimitMode;

@@ -1,7 +1,9 @@
 // Aurora chase plan generation engine
 // Implements the scoring algorithm and generates the full structured plan
 
-import { ZONES, WEATHER_CHECKPOINTS, CLOUD_REGIMES, TROMSO_CENTER, getCloudRegime, getAllLocations } from './zones.js';
+import { ZONES, WEATHER_CHECKPOINTS, CLOUD_REGIMES, TROMSO_CENTER,
+  REYKJAVIK_ZONES, REYKJAVIK_WEATHER_CHECKPOINTS, REYKJAVIK_CLOUD_REGIMES, REYKJAVIK_CENTER,
+  getCloudRegime, getAllLocations } from './zones.js';
 import { fetchMultipleLocations, extractEveningForecast, scoreWeather } from './weather.js';
 import { getAuroraSummary } from './aurora.js';
 import { getDarkWindow } from './sun.js';
@@ -368,27 +370,27 @@ export async function generatePlan(targetDate, options = {}) {
   const [year, month, day] = dateStr.split('-').map(Number);
   const opts = normalizeOptions(options);
 
+  // Use dynamic zones/checkpoints if provided, otherwise use Reykjavík defaults
+  const activeZones = opts.zones || REYKJAVIK_ZONES;
+  const checkpoints = opts.checkpoints || REYKJAVIK_WEATHER_CHECKPOINTS;
+  const allLocations = opts.allLocations || getAllLocations();
+  const cloudRegimes = opts.cloudRegimes || REYKJAVIK_CLOUD_REGIMES;
+  const centerLat = opts.centerLat ?? REYKJAVIK_CENTER.lat;
+  const centerLon = opts.centerLon ?? REYKJAVIK_CENTER.lon;
+  const cityName = opts.cityName || 'Reykjavík';
+
   // Fetch aurora data (with fallback on failure)
   let aurora;
   try {
-    aurora = await getAuroraSummary(dateStr);
+    aurora = await getAuroraSummary(dateStr, { centerLat, centerLon, cityName });
   } catch (err) {
     console.error('Aurora fetch failed, using defaults:', err.message);
     aurora = {
       currentKp: null, tonightKp: { avg: null, max: null, entries: [] },
-      tromsoProbability: null, activityLevel: 'UNKNOWN', visibility: 'Aurora data unavailable - check manually',
+      locationProbability: null, activityLevel: 'UNKNOWN', visibility: 'Aurora data unavailable - check manually',
       ovationTime: null, kpForecastAvailable: false, ovationAvailable: false,
     };
   }
-
-  // Use dynamic zones/checkpoints if provided, otherwise use Tromsø defaults
-  const activeZones = opts.zones || ZONES;
-  const checkpoints = opts.checkpoints || WEATHER_CHECKPOINTS;
-  const allLocations = opts.allLocations || getAllLocations();
-  const cloudRegimes = opts.cloudRegimes || CLOUD_REGIMES;
-  const centerLat = opts.centerLat ?? TROMSO_CENTER.lat;
-  const centerLon = opts.centerLon ?? TROMSO_CENTER.lon;
-  const cityName = opts.cityName || 'Tromsø';
   const seen = new Set();
   const fetchList = [];
   // Checkpoints first (they're used for scoring)
@@ -687,7 +689,7 @@ export function generateUpdateResponse(currentLocation, skyCondition, snowCondit
   } else {
     // cloudy
     if (snowCondition === 'heavy') {
-      actions.push('SWITCH TO BACKUP B (closest safe option) or return to Tromsø.');
+      actions.push('SWITCH TO BACKUP B (closest safe option) or return to base.');
     } else {
       actions.push(`MOVE to ${plan?.backupA?.location ?? 'Backup A'} → "${plan?.backupA?.anchor ?? 'check plan'}" (different cloud regime)`);
     }
@@ -733,7 +735,7 @@ export function diagnoseCamera(issue) {
       fixes: [
         'FIRST: Reduce ISO (6400 → 3200 → 1600).',
         'THEN: Reduce shutter (15s → 8s → 4s).',
-        'Aim camera away from Tromsø light dome (shoot north or into dark horizon).',
+        'Aim camera away from city light dome (shoot north or into dark horizon).',
         'If moon is up, use it as a creative element but reduce exposure significantly.',
       ],
     },

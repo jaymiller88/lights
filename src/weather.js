@@ -3,7 +3,7 @@
 
 import { addDaysToDateStr, getZonedParts } from './timezone.js';
 
-const USER_AGENT = 'TromsoAuroraCopilot/1.0 github.com/aurora-copilot';
+const USER_AGENT = 'AuroraChaseCopilot/2.0 github.com/aurora-copilot';
 const BASE_URL = 'https://api.met.no/weatherapi/locationforecast/2.0/compact';
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 

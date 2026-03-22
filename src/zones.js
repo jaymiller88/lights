@@ -269,7 +269,235 @@ export const CLOUD_REGIMES = {
   inland_south: ['S'],
 };
 
-// Get all unique locations for weather fetching (Tromsø default)
+// ===== Reykjavik, Iceland =====
+
+export const REYKJAVIK_CENTER = { lat: 64.1466, lon: -21.9426 };
+
+export const REYKJAVIK_ZONES = {
+  '0': {
+    name: 'In Town / Quick Fallback',
+    code: '0',
+    driveMinutes: [0, 15],
+    lightPollution: 'high',
+    lightPollutionScore: 0,
+    description: 'Reykjavík city area. Higher light pollution but minimal driving.',
+    locations: [
+      {
+        id: 'grotta',
+        name: 'Grótta Lighthouse',
+        anchor: 'Grótta, Seltjarnarnes',
+        lat: 64.1636,
+        lon: -22.0178,
+        parking: 'Car park at the lighthouse peninsula. Accessible at low tide on foot.',
+        notes: 'Western tip of Reykjavík. Open views north and west over the ocean. Best city-area dark sky spot.',
+      },
+      {
+        id: 'seltjarnarnes',
+        name: 'Seltjarnarnes Shore',
+        anchor: 'Seltjarnarnes, Iceland',
+        lat: 64.1553,
+        lon: -22.0086,
+        parking: 'Street parking near the shore. Respect residential areas.',
+        notes: 'Coastal path with open northern horizon. City lights behind you to the east.',
+      },
+      {
+        id: 'perlan',
+        name: 'Perlan / Öskjuhlíð Hill',
+        anchor: 'Perlan, Reykjavík',
+        lat: 64.1286,
+        lon: -21.9178,
+        parking: 'Perlan parking lot. Well-maintained year-round.',
+        notes: 'Elevated viewpoint above city. Panoramic views but significant light pollution. Good for quick checks.',
+      },
+    ],
+  },
+  W: {
+    name: 'Reykjanes Peninsula',
+    code: 'W',
+    driveMinutes: [30, 60],
+    lightPollution: 'low-medium',
+    lightPollutionScore: 7,
+    description: 'Southwest of Reykjavík. Volcanic lava fields with open horizons. Near Keflavík airport.',
+    locations: [
+      {
+        id: 'gardskagi',
+        name: 'Garðskagi Lighthouse',
+        anchor: 'Garðskagi lighthouse, Iceland',
+        lat: 64.0828,
+        lon: -22.6933,
+        parking: 'Lighthouse car park. Open year-round.',
+        notes: 'Northernmost tip of Reykjanes. 360° open horizon. Very dark over ocean. Can be extremely windy.',
+      },
+      {
+        id: 'reykjanesbraut',
+        name: 'Reykjanesviti / Valahnúkur',
+        anchor: 'Reykjanesviti lighthouse, Iceland',
+        lat: 63.8150,
+        lon: -22.7117,
+        parking: 'Car park at the lighthouse area. Paved road.',
+        notes: 'Dramatic cliffs and lava fields. Very dark. Southern horizon over open Atlantic. Watch for wind.',
+      },
+    ],
+  },
+  N: {
+    name: 'Þingvellir / Golden Circle',
+    code: 'N',
+    driveMinutes: [45, 75],
+    lightPollution: 'low',
+    lightPollutionScore: 10,
+    description: 'Northeast of Reykjavík. UNESCO World Heritage site with very dark skies.',
+    locations: [
+      {
+        id: 'thingvellir',
+        name: 'Þingvellir National Park',
+        anchor: 'Þingvellir National Park, Iceland',
+        lat: 64.2559,
+        lon: -21.1301,
+        parking: 'Main visitor car park (P1-P5). Well-maintained. Parking fee applies.',
+        notes: 'UNESCO site. Very dark skies, dramatic rift valley. Lake Þingvallavatn provides water reflections. Popular aurora spot.',
+      },
+      {
+        id: 'laugarvatn',
+        name: 'Laugarvatn',
+        anchor: 'Laugarvatn, Iceland',
+        lat: 64.2167,
+        lon: -20.7333,
+        parking: 'Village parking near the lake. Limited space in winter.',
+        notes: 'Small lake town with dark skies. Geothermal area. Less crowded than Þingvellir.',
+      },
+    ],
+  },
+  'E/NE': {
+    name: 'Geysir / Gullfoss',
+    code: 'E/NE',
+    driveMinutes: [75, 110],
+    lightPollution: 'very-low',
+    lightPollutionScore: 12,
+    description: 'Interior highland edge. Very dark skies, inland weather often clearer than coast.',
+    locations: [
+      {
+        id: 'geysir',
+        name: 'Geysir Geothermal Area',
+        anchor: 'Geysir, Iceland',
+        lat: 64.3103,
+        lon: -20.3025,
+        parking: 'Large visitor car park. Well-maintained.',
+        notes: 'Geothermal steam and dark skies make dramatic foreground. Very dark. Often clearer inland weather.',
+      },
+      {
+        id: 'gullfoss',
+        name: 'Gullfoss Area',
+        anchor: 'Gullfoss, Iceland',
+        lat: 64.3271,
+        lon: -20.1215,
+        parking: 'Visitor centre car park. May be icy in winter.',
+        notes: 'Waterfall area with open views. Very dark skies. Road well-maintained as part of Golden Circle.',
+      },
+    ],
+  },
+  S: {
+    name: 'South Coast / Selfoss',
+    code: 'S',
+    driveMinutes: [50, 90],
+    lightPollution: 'low',
+    lightPollutionScore: 9,
+    description: 'South along Route 1. Farmland and coastal areas with good horizons.',
+    locations: [
+      {
+        id: 'selfoss',
+        name: 'Selfoss / Ölfusá Area',
+        anchor: 'Selfoss, Iceland',
+        lat: 63.9381,
+        lon: -20.9944,
+        parking: 'Town parking or pull-offs along Route 1.',
+        notes: 'Small town hub. River Ölfusá for reflections. Good staging point for further south.',
+      },
+      {
+        id: 'vik_reynisfjara',
+        name: 'Vík / Reynisfjara',
+        anchor: 'Reynisfjara beach, Iceland',
+        lat: 63.4050,
+        lon: -19.0450,
+        parking: 'Reynisfjara car park. Use extreme caution near the beach — sneaker waves.',
+        notes: 'Black sand beach with sea stacks. Stunning aurora backdrop. DANGER: Never turn your back to the ocean at Reynisfjara.',
+      },
+    ],
+  },
+  SE: {
+    name: 'Snæfellsnes Peninsula',
+    code: 'SE',
+    driveMinutes: [120, 180],
+    lightPollution: 'very-low',
+    lightPollutionScore: 13,
+    description: 'Northwest peninsula. Dramatic landscapes, very dark. Longer drive but iconic aurora scenery.',
+    locations: [
+      {
+        id: 'kirkjufell',
+        name: 'Kirkjufell / Grundarfjörður',
+        anchor: 'Kirkjufell, Iceland',
+        lat: 64.9426,
+        lon: -23.3088,
+        parking: 'Kirkjufell car park on Route 54. Small but maintained.',
+        notes: 'Iconic mountain — one of the most photographed aurora spots in the world. Waterfall foreground. Very dark skies.',
+      },
+      {
+        id: 'arnarstapi',
+        name: 'Arnarstapi',
+        anchor: 'Arnarstapi, Iceland',
+        lat: 64.7667,
+        lon: -23.6167,
+        parking: 'Village car park near the harbour.',
+        notes: 'Coastal cliffs and sea arches. Very dark. Exposed to weather from the west.',
+      },
+    ],
+  },
+  SW: {
+    name: 'Borgarfjörður / Hraunfossar',
+    code: 'SW',
+    driveMinutes: [75, 120],
+    lightPollution: 'low',
+    lightPollutionScore: 10,
+    description: 'North of Reykjavík via tunnel. Inland valley with waterfalls and dark skies.',
+    locations: [
+      {
+        id: 'hraunfossar',
+        name: 'Hraunfossar / Barnafoss',
+        anchor: 'Hraunfossar, Iceland',
+        lat: 64.7036,
+        lon: -20.9747,
+        parking: 'Visitor car park at the waterfalls. Paved.',
+        notes: 'Lava waterfalls with dark surroundings. Unique foreground for aurora photos. Inland, often clearer.',
+      },
+      {
+        id: 'reykholt',
+        name: 'Reykholt',
+        anchor: 'Reykholt, Borgarfjörður, Iceland',
+        lat: 64.6653,
+        lon: -21.2967,
+        parking: 'Village parking near the cultural centre.',
+        notes: 'Historic site in a sheltered valley. Dark skies. Good intermediate stop.',
+      },
+    ],
+  },
+};
+
+export const REYKJAVIK_WEATHER_CHECKPOINTS = [
+  { id: 'reykjavik', name: 'Reykjavík', lat: 64.1466, lon: -21.9426, zone: '0' },
+  { id: 'gardskagi', name: 'Garðskagi (Reykjanes)', lat: 64.0828, lon: -22.6933, zone: 'W' },
+  { id: 'thingvellir', name: 'Þingvellir', lat: 64.2559, lon: -21.1301, zone: 'N' },
+  { id: 'geysir', name: 'Geysir', lat: 64.3103, lon: -20.3025, zone: 'E/NE' },
+  { id: 'selfoss', name: 'Selfoss', lat: 63.9381, lon: -20.9944, zone: 'S' },
+  { id: 'kirkjufell', name: 'Kirkjufell (Snæfellsnes)', lat: 64.9426, lon: -23.3088, zone: 'SE' },
+  { id: 'hraunfossar', name: 'Hraunfossar', lat: 64.7036, lon: -20.9747, zone: 'SW' },
+];
+
+export const REYKJAVIK_CLOUD_REGIMES = {
+  coastal: ['0', 'W', 'S'],
+  inland_east: ['N', 'E/NE', 'SW'],
+  inland_south: ['SE'],
+};
+
+// Get all unique locations for weather fetching (Reykjavik default)
 export function getAllLocations() {
   return buildAllLocations(ZONES);
 }

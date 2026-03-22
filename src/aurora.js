@@ -20,7 +20,7 @@ async function cachedFetch(url, key) {
   }
 
   const res = await fetch(url, {
-    headers: { 'User-Agent': 'TromsoAuroraCopilot/1.0' },
+    headers: { 'User-Agent': 'AuroraChaseCopilot/2.0' },
   });
 
   if (!res.ok) {
@@ -78,14 +78,10 @@ export async function fetchOvation() {
   }
 }
 
-// Extract aurora probability for Tromsø latitude from OVATION data
-export function getAuroraProbabilityForTromso(ovationData) {
+// Extract aurora probability for a given location from OVATION data
+export function getAuroraProbabilityForLocation(ovationData, targetLat = 64.15, targetLon = -21.94) {
   if (!ovationData?.coordinates) return null;
 
-  // Tromsø is at ~69.65°N, ~19°E
-  // Find the closest OVATION grid points
-  const targetLat = 69.65;
-  const targetLon = 19.0;
   let closestProb = 0;
   let closestDist = Infinity;
 
@@ -102,7 +98,7 @@ export function getAuroraProbabilityForTromso(ovationData) {
 }
 
 // Get tonight's Kp values (evening hours)
-export function getTonightKp(kpEntries, targetDate, timeZone = 'Europe/Oslo', startHour = 18, endHour = 3) {
+export function getTonightKp(kpEntries, targetDate, timeZone = 'Atlantic/Reykjavik', startHour = 18, endHour = 3) {
   if (!kpEntries) return { avg: null, max: null, entries: [] };
 
   const nextDateStr = addDaysToDateStr(targetDate, 1);
@@ -131,7 +127,8 @@ export function getTonightKp(kpEntries, targetDate, timeZone = 'Europe/Oslo', st
 }
 
 // Aggregate aurora data into a summary
-export async function getAuroraSummary(targetDate) {
+// centerLat/centerLon default to Reykjavik; pass any city center for accurate OVATION lookup
+export async function getAuroraSummary(targetDate, { centerLat = 64.15, centerLon = -21.94, cityName = 'Reykjavík' } = {}) {
   const [kpForecast, currentKp, ovation] = await Promise.all([
     fetchKpForecast(),
     fetchCurrentKp(),
@@ -139,7 +136,7 @@ export async function getAuroraSummary(targetDate) {
   ]);
 
   const tonightKp = getTonightKp(kpForecast, targetDate);
-  const tromsoProbability = ovation ? getAuroraProbabilityForTromso(ovation) : null;
+  const locationProbability = ovation ? getAuroraProbabilityForLocation(ovation, centerLat, centerLon) : null;
 
   // Determine activity level
   const kpMax = tonightKp.max ?? currentKp?.kp ?? 0;
@@ -150,16 +147,17 @@ export async function getAuroraSummary(targetDate) {
   else if (kpMax >= 2) activityLevel = 'NORMAL';
   else activityLevel = 'LOW';
 
-  // At Tromsø's latitude (69.65°N), even Kp 1-2 can produce visible aurora
+  // Visibility message based on latitude and Kp
+  const latLabel = `${cityName} latitude`;
   let visibility;
-  if (kpMax >= 3) visibility = 'Good chance of visible aurora at Tromsø latitude';
-  else if (kpMax >= 1.5) visibility = 'Possible aurora at Tromsø latitude, may be faint or low on horizon';
-  else visibility = 'Low aurora activity, but faint displays still possible at this latitude';
+  if (kpMax >= 3) visibility = `Good chance of visible aurora at ${latLabel}`;
+  else if (kpMax >= 1.5) visibility = `Possible aurora at ${latLabel}, may be faint or low on horizon`;
+  else visibility = `Low aurora activity, but faint displays still possible at ${latLabel}`;
 
   return {
     currentKp: currentKp?.kp ?? null,
     tonightKp,
-    tromsoProbability,
+    locationProbability,
     activityLevel,
     visibility,
     ovationTime: ovation?.Forecast_Time ?? null,

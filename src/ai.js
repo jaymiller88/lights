@@ -1,7 +1,8 @@
 // AI-powered aurora location generator using OpenAI API
 // Generates zone/location data matching the ZONES structure for any city.
 
-import { ZONES, WEATHER_CHECKPOINTS, CLOUD_REGIMES, TROMSO_CENTER } from './zones.js';
+import { ZONES, WEATHER_CHECKPOINTS, CLOUD_REGIMES, TROMSO_CENTER,
+  REYKJAVIK_ZONES, REYKJAVIK_WEATHER_CHECKPOINTS, REYKJAVIK_CLOUD_REGIMES, REYKJAVIK_CENTER } from './zones.js';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const OPENAI_CHAT_MODEL = process.env.OPENAI_CHAT_MODEL || 'gpt-4o';
@@ -173,7 +174,7 @@ async function callOpenAI(cityName, lat, lon) {
 export async function generateLocationsForCity(cityName, originLat, originLon) {
   // Fallback: no API key or empty city
   if (!AI_ENABLED || !cityName) {
-    return getTromsoFallback();
+    return getDefaultFallback();
   }
 
   const key = normalizeCityKey(cityName);
@@ -193,8 +194,8 @@ export async function generateLocationsForCity(cityName, originLat, originLon) {
     const raw = await callOpenAI(cityName, lat, lon);
 
     if (!validateZones(raw)) {
-      console.warn('[AI] Invalid zone data from OpenAI, falling back to Tromsø');
-      return getTromsoFallback();
+      console.warn('[AI] Invalid zone data from OpenAI, falling back to Reykjavík');
+      return getDefaultFallback();
     }
 
     const result = buildResult(raw);
@@ -206,7 +207,7 @@ export async function generateLocationsForCity(cityName, originLat, originLon) {
     return result;
   } catch (err) {
     console.error(`[AI] Failed to generate locations for "${cityName}":`, err.message);
-    return getTromsoFallback();
+    return getDefaultFallback();
   }
 }
 
@@ -294,7 +295,39 @@ function buildCloudRegimesFromZones(zones) {
   };
 }
 
-function getTromsoFallback() {
+function getDefaultFallback() {
+  return getReykjavikFallback();
+}
+
+export function getReykjavikFallback() {
+  const checkpoints = REYKJAVIK_WEATHER_CHECKPOINTS;
+  const allLocations = [];
+  for (const zone of Object.values(REYKJAVIK_ZONES)) {
+    for (const loc of zone.locations) {
+      allLocations.push({
+        ...loc,
+        zoneCode: zone.code,
+        zoneName: zone.name,
+        lightPollutionScore: zone.lightPollutionScore,
+        driveMinutes: zone.driveMinutes,
+      });
+    }
+  }
+
+  return {
+    zones: REYKJAVIK_ZONES,
+    checkpoints,
+    allLocations,
+    cloudRegimes: REYKJAVIK_CLOUD_REGIMES,
+    centerLat: REYKJAVIK_CENTER.lat,
+    centerLon: REYKJAVIK_CENTER.lon,
+    timeZone: 'Atlantic/Reykjavik',
+    cityName: 'Reykjavík',
+    source: 'default',
+  };
+}
+
+export function getTromsoFallback() {
   const checkpoints = WEATHER_CHECKPOINTS;
   const allLocations = [];
   for (const zone of Object.values(ZONES)) {
