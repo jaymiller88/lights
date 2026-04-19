@@ -32,18 +32,40 @@ async function cachedFetch(url, key) {
   return data;
 }
 
+// Normalize a single NOAA entry into { time, kp, type }.  NOAA has served
+// both an array-of-arrays format (with a header row) and an array-of-objects
+// format over time; accept either and drop rows with non-finite Kp or a
+// time that won't parse.
+function normalizeKpEntry(row) {
+  if (!row) return null;
+  let time;
+  let kp;
+  let type;
+  if (Array.isArray(row)) {
+    time = row[0];
+    kp = parseFloat(row[1]);
+    type = row[2];
+  } else if (typeof row === 'object') {
+    time = row.time_tag || row.time;
+    const raw = row.kp ?? row.Kp ?? row.kp_index;
+    kp = typeof raw === 'number' ? raw : parseFloat(raw);
+    type = row.observed || row.type || row.status || null;
+  }
+  if (!time || !Number.isFinite(kp)) return null;
+  if (Number.isNaN(new Date(time).getTime())) return null;
+  return { time, kp, type };
+}
+
 // Fetch Kp index forecast
 export async function fetchKpForecast() {
   try {
     const data = await cachedFetch(KP_FORECAST_URL, 'kp_forecast');
-    // Format: array of [time_tag, kp, observed/estimated/predicted]
-    // Skip header row
-    const entries = data.slice(1).map(row => ({
-      time: row[0],
-      kp: parseFloat(row[1]),
-      type: row[2], // "observed", "estimated", "predicted"
-    }));
-    return entries;
+    if (!Array.isArray(data)) return null;
+    // The legacy format included a header row (array-of-arrays); skip it only
+    // when the first row looks like headers, not when it's an object.
+    const rows = Array.isArray(data[0]) ? data.slice(1) : data;
+    const entries = rows.map(normalizeKpEntry).filter(Boolean);
+    return entries.length ? entries : null;
   } catch (err) {
     console.error('Failed to fetch Kp forecast:', err.message);
     return null;
@@ -54,12 +76,10 @@ export async function fetchKpForecast() {
 export async function fetchCurrentKp() {
   try {
     const data = await cachedFetch(KP_CURRENT_URL, 'kp_current');
-    const entries = data.slice(1).map(row => ({
-      time: row[0],
-      kp: parseFloat(row[1]),
-    }));
-    // Return the most recent
-    return entries.length > 0 ? entries[entries.length - 1] : null;
+    if (!Array.isArray(data)) return null;
+    const rows = Array.isArray(data[0]) ? data.slice(1) : data;
+    const entries = rows.map(normalizeKpEntry).filter(Boolean);
+    return entries.length ? entries[entries.length - 1] : null;
   } catch (err) {
     console.error('Failed to fetch current Kp:', err.message);
     return null;
@@ -106,6 +126,7 @@ export function getTonightKp(kpEntries, targetDate, timeZone = 'Atlantic/Reykjav
   const tonight = [];
   for (const entry of kpEntries) {
     const d = new Date(entry.time);
+    if (Number.isNaN(d.getTime())) continue;
     const localDateStr = getZonedDateStr(d, timeZone);
     const localHour = getZonedHour(d, timeZone);
 

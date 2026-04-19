@@ -3,7 +3,7 @@
 
 import { ZONES, WEATHER_CHECKPOINTS, CLOUD_REGIMES, TROMSO_CENTER,
   REYKJAVIK_ZONES, REYKJAVIK_WEATHER_CHECKPOINTS, REYKJAVIK_CLOUD_REGIMES, REYKJAVIK_CENTER,
-  getCloudRegime, getAllLocations } from './zones.js';
+  getCloudRegime, buildAllLocations } from './zones.js';
 import { fetchMultipleLocations, extractEveningForecast, scoreWeather } from './weather.js';
 import { getAuroraSummary } from './aurora.js';
 import { getDarkWindow } from './sun.js';
@@ -370,10 +370,12 @@ export async function generatePlan(targetDate, options = {}) {
   const [year, month, day] = dateStr.split('-').map(Number);
   const opts = normalizeOptions(options);
 
-  // Use dynamic zones/checkpoints if provided, otherwise use Reykjavík defaults
+  // Use dynamic zones/checkpoints if provided, otherwise use Reykjavík defaults.
+  // allLocations MUST be derived from activeZones — otherwise we fetch weather for
+  // a different set of locations than we score, leaving most zone items blank.
   const activeZones = opts.zones || REYKJAVIK_ZONES;
   const checkpoints = opts.checkpoints || REYKJAVIK_WEATHER_CHECKPOINTS;
-  const allLocations = opts.allLocations || getAllLocations();
+  const allLocations = opts.allLocations || buildAllLocations(activeZones);
   const cloudRegimes = opts.cloudRegimes || REYKJAVIK_CLOUD_REGIMES;
   const centerLat = opts.centerLat ?? REYKJAVIK_CENTER.lat;
   const centerLon = opts.centerLon ?? REYKJAVIK_CENTER.lon;
