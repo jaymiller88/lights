@@ -1427,15 +1427,33 @@ function setStatus(state, text) {
   txt.textContent = text;
 }
 
+/*
+ * iOS Safari scroll lock.
+ * `body { overflow: hidden }` is insufficient — iOS still allows background
+ * bounce/scroll. We pin the body with position:fixed and restore the scroll
+ * position on close. See web/lib/scrollLock.ts in the parent project.
+ */
+let _savedScrollY = 0;
+function lockScroll() {
+  _savedScrollY = window.scrollY || window.pageYOffset || 0;
+  document.body.classList.add('modal-open');
+  document.body.style.top = `-${_savedScrollY}px`;
+}
+function unlockScroll() {
+  document.body.classList.remove('modal-open');
+  document.body.style.top = '';
+  window.scrollTo(0, _savedScrollY);
+}
+
 function showModal(html) {
   document.getElementById('modal-content').innerHTML = html;
   document.getElementById('modal-overlay').classList.remove('hidden');
-  document.body.style.overflow = 'hidden';
+  lockScroll();
 }
 
 function hideModal() {
   document.getElementById('modal-overlay').classList.add('hidden');
-  document.body.style.overflow = '';
+  unlockScroll();
 }
 
 function closeModal(event) {

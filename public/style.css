@@ -49,13 +49,29 @@ body {
   font-family: var(--font-sans);
   line-height: 1.6;
   min-height: 100vh;
+  min-height: 100dvh;
   -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior-y: contain;
+}
+
+/* iOS-safe scroll lock: applied to <body> while a modal is open. */
+body.modal-open {
+  position: fixed;
+  overflow: hidden;
+  width: 100%;
+  left: 0;
+  right: 0;
 }
 
 #app {
   max-width: 900px;
   margin: 0 auto;
-  padding: 0 12px 80px;
+  padding:
+    env(safe-area-inset-top)
+    max(12px, env(safe-area-inset-right))
+    max(80px, env(safe-area-inset-bottom))
+    max(12px, env(safe-area-inset-left));
 }
 
 /* Header */
@@ -143,6 +159,10 @@ body {
   transition: all 0.2s;
   white-space: nowrap;
   letter-spacing: 0.03em;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .cmd-btn:hover {
@@ -758,7 +778,11 @@ body {
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  padding: 16px;
+  padding:
+    max(16px, env(safe-area-inset-top))
+    max(16px, env(safe-area-inset-right))
+    max(16px, env(safe-area-inset-bottom))
+    max(16px, env(safe-area-inset-left));
 }
 
 .modal {
@@ -768,26 +792,34 @@ body {
   max-width: 500px;
   width: 100%;
   max-height: 80vh;
+  max-height: 80dvh;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   padding: 24px;
   position: relative;
 }
 
 .modal-close {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: 8px;
+  right: 8px;
   background: none;
   border: none;
   color: var(--text-muted);
   font-size: 1.5rem;
+  line-height: 1;
   cursor: pointer;
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .modal-close:hover {
@@ -819,13 +851,18 @@ body {
 
 .modal-input {
   width: 100%;
+  min-height: 44px;
   padding: 10px 12px;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: 6px;
   color: var(--text-primary);
-  font-size: 0.85rem;
+  /* html font-size is 15px; iOS auto-zooms if <16px, so pin absolute 16px */
+  font-size: 16px;
   font-family: var(--font-sans);
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
 }
 
 .modal-input:focus {
@@ -835,30 +872,44 @@ body {
 
 .modal-select {
   width: 100%;
-  padding: 10px 12px;
+  min-height: 44px;
+  padding: 10px 36px 10px 12px;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: 6px;
   color: var(--text-primary);
-  font-size: 0.85rem;
+  /* html font-size is 15px; iOS auto-zooms if <16px, so pin absolute 16px */
+  font-size: 16px;
   font-family: var(--font-sans);
+  -webkit-appearance: none;
+  -moz-appearance: none;
   appearance: none;
   cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, var(--text-secondary) 50%),
+    linear-gradient(135deg, var(--text-secondary) 50%, transparent 50%);
+  background-position: calc(100% - 18px) 50%, calc(100% - 12px) 50%;
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
 }
 
 .modal-btn {
   width: 100%;
+  min-height: 44px;
   padding: 12px;
   background: var(--accent-dim);
   border: 1px solid var(--accent);
   border-radius: 6px;
   color: #fff;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   font-family: var(--font-mono);
   font-weight: 700;
   cursor: pointer;
   transition: all 0.2s;
   letter-spacing: 0.03em;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .modal-btn:hover {
@@ -1142,7 +1193,7 @@ body {
 }
 
 .countdown-label {
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-family: var(--font-mono);
   color: var(--text-muted);
   text-transform: uppercase;
@@ -1151,18 +1202,18 @@ body {
 }
 
 .countdown-event {
-  font-size: 0.82rem;
+  font-size: 0.95rem;
   font-family: var(--font-mono);
   color: var(--text-primary);
   flex-grow: 1;
 }
 
 .countdown-time {
-  font-size: 1rem;
+  font-size: 1.15rem;
   font-family: var(--font-mono);
   font-weight: 700;
   color: var(--accent-glow);
-  min-width: 70px;
+  min-width: 80px;
   text-align: right;
 }
 
