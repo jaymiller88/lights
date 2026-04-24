@@ -1154,7 +1154,10 @@ body.modal-open {
 
 /* Responsive */
 @media (max-width: 480px) {
-  html { font-size: 14px; }
+  /* Do NOT override html font-size here: root 14px makes `1rem` equal 14px,
+     which drops every `font-size: 1rem` input below the 16px iOS auto-zoom
+     threshold. Form controls that need to be visually small on mobile should
+     use absolute 16px (see .modal-input). */
   #app { padding: 0 8px 60px; }
   .header-title h1 { font-size: 0.95rem; }
   .cmd-btn { padding: 8px 12px; font-size: 0.75rem; }
