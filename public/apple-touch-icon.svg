@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" role="img" aria-label="Aurora Chase Copilot">
+  <defs>
+    <linearGradient id="aurora" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0a0a12"/>
+      <stop offset="50%" stop-color="#0f3a2e"/>
+      <stop offset="100%" stop-color="#0a0a12"/>
+    </linearGradient>
+  </defs>
+  <rect width="180" height="180" rx="40" fill="url(#aurora)"/>
+  <path d="M22 108 Q56 50 90 84 T158 62" fill="none" stroke="#5eead4" stroke-width="9" stroke-linecap="round" opacity="0.95"/>
+  <path d="M22 130 Q56 78 90 108 T158 92" fill="none" stroke="#a78bfa" stroke-width="6" stroke-linecap="round" opacity="0.8"/>
+  <circle cx="138" cy="40" r="4" fill="#fde68a"/>
+  <circle cx="38" cy="50" r="3" fill="#fde68a" opacity="0.85"/>
+  <circle cx="78" cy="34" r="2.5" fill="#fde68a" opacity="0.75"/>
+</svg>

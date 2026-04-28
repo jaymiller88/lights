@@ -537,8 +537,8 @@ body.modal-open {
 }
 
 .anchor-copy.small {
-  padding: 8px 10px;
-  min-height: 38px;
+  padding: 10px 12px;
+  min-height: 44px;
   font-size: 0.78rem;
 }
 
@@ -554,7 +554,7 @@ body.modal-open {
   align-items: center;
   justify-content: center;
   padding: 10px 12px;
-  min-height: 40px;
+  min-height: 44px;
   border-radius: 6px;
   border: 1px solid var(--border);
   background: var(--bg-secondary);
@@ -726,8 +726,8 @@ body.modal-open {
 }
 
 .checklist-box {
-  width: 18px;
-  height: 18px;
+  width: 24px;
+  height: 24px;
   border: 2px solid var(--border);
   border-radius: 4px;
   flex-shrink: 0;
@@ -735,6 +735,14 @@ body.modal-open {
   align-items: center;
   justify-content: center;
   transition: all 0.2s;
+  /* Extend the tap target to 44x44 without growing the visual box. */
+  position: relative;
+}
+.checklist-box::before {
+  content: '';
+  position: absolute;
+  inset: -10px;
+  /* Invisible expansion of the touch surface for the iOS 44px floor. */
 }
 
 .checklist-item.checked .checklist-box {
@@ -763,6 +771,10 @@ body.modal-open {
   font-size: 0.82rem;
   line-height: 1.7;
   white-space: pre-wrap;
+  /* Long URLs/coordinate lists in condensed text shouldn't blow out the
+     layout on narrow phones. */
+  word-break: break-word;
+  overflow-wrap: break-word;
   color: var(--text-primary);
 }
 
@@ -802,8 +814,10 @@ body.modal-open {
 
 .modal-close {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  /* max() so a phone with a notch/pill cutout pushes the close button below
+     the safe-area inset rather than under the dynamic island. */
+  top: max(8px, env(safe-area-inset-top));
+  right: max(8px, env(safe-area-inset-right));
   background: none;
   border: none;
   color: var(--text-muted);
@@ -1160,7 +1174,7 @@ body.modal-open {
      use absolute 16px (see .modal-input). */
   #app { padding: 0 8px 60px; }
   .header-title h1 { font-size: 0.95rem; }
-  .cmd-btn { padding: 8px 12px; font-size: 0.75rem; }
+  .cmd-btn { padding: 12px 14px; min-height: 44px; font-size: 0.75rem; }
   .plan-section-body { padding: 12px; overflow-x: auto; }
 
   /* Tables: allow horizontal scroll instead of overflowing the viewport */
