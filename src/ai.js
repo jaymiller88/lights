@@ -7,6 +7,7 @@ import { ZONES, WEATHER_CHECKPOINTS, CLOUD_REGIMES, TROMSO_CENTER,
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const OPENAI_CHAT_MODEL = process.env.OPENAI_CHAT_MODEL || 'gpt-4o';
 const OPENAI_API_BASE = (process.env.OPENAI_API_BASE || 'https://api.openai.com/v1').replace(/\/+$/, '');
+const OPENAI_TIMEOUT_MS = Number(process.env.OPENAI_TIMEOUT_MS) || 30000;
 
 export const AI_ENABLED = !!OPENAI_API_KEY;
 
@@ -141,16 +142,33 @@ async function callOpenAI(cityName, lat, lon) {
     ],
     temperature: 0.7,
     max_tokens: 6000,
+    // Force a valid JSON object back so we never depend on fence-stripping to parse.
+    response_format: { type: 'json_object' },
   };
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${OPENAI_API_KEY}`,
-    },
-    body: JSON.stringify(body),
-  });
+  // Bound the call — a hung LLM request would otherwise stall the whole /api/plan.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), OPENAI_TIMEOUT_MS);
+
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      throw new Error(`OpenAI request timed out after ${OPENAI_TIMEOUT_MS}ms`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
@@ -161,7 +179,8 @@ async function callOpenAI(cityName, lat, lon) {
   const content = json.choices?.[0]?.message?.content;
   if (!content) throw new Error('Empty response from OpenAI');
 
-  // Strip markdown code fences if present
+  // json_object mode returns clean JSON; keep fence-stripping as a defensive fallback
+  // for OpenAI-compatible providers that ignore response_format.
   const cleaned = content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
   return JSON.parse(cleaned);
 }

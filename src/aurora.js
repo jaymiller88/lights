@@ -10,8 +10,6 @@ const cache = new Map();
 const KP_FORECAST_URL = 'https://services.swpc.noaa.gov/products/noaa-planetary-k-index-forecast.json';
 const KP_CURRENT_URL = 'https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json';
 const OVATION_URL = 'https://services.swpc.noaa.gov/json/ovation_aurora_latest.json';
-const THREE_DAY_URL = 'https://services.swpc.noaa.gov/products/noaa-planetary-k-index-forecast.json';
-const WING_KP_URL = 'https://services.swpc.noaa.gov/products/summary/solar-wind-mag-field.json';
 
 async function cachedFetch(url, key) {
   const cached = cache.get(key);
@@ -148,15 +146,17 @@ export function getTonightKp(kpEntries, targetDate, timeZone = 'Atlantic/Reykjav
 }
 
 // Aggregate aurora data into a summary
-// centerLat/centerLon default to Reykjavik; pass any city center for accurate OVATION lookup
-export async function getAuroraSummary(targetDate, { centerLat = 64.15, centerLon = -21.94, cityName = 'Reykjavík' } = {}) {
+// centerLat/centerLon default to Reykjavik; pass any city center for accurate OVATION lookup.
+// timeZone must be the city's IANA zone so "tonight's" Kp window is computed locally
+// (otherwise a Tromsø plan would read Kp for Reykjavík evening hours — an hour or two off).
+export async function getAuroraSummary(targetDate, { centerLat = 64.15, centerLon = -21.94, cityName = 'Reykjavík', timeZone = 'Atlantic/Reykjavik' } = {}) {
   const [kpForecast, currentKp, ovation] = await Promise.all([
     fetchKpForecast(),
     fetchCurrentKp(),
     fetchOvation(),
   ]);
 
-  const tonightKp = getTonightKp(kpForecast, targetDate);
+  const tonightKp = getTonightKp(kpForecast, targetDate, timeZone);
   const locationProbability = ovation ? getAuroraProbabilityForLocation(ovation, centerLat, centerLon) : null;
 
   // Determine activity level

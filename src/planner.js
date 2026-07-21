@@ -384,7 +384,7 @@ export async function generatePlan(targetDate, options = {}) {
   // Fetch aurora data (with fallback on failure)
   let aurora;
   try {
-    aurora = await getAuroraSummary(dateStr, { centerLat, centerLon, cityName });
+    aurora = await getAuroraSummary(dateStr, { centerLat, centerLon, cityName, timeZone: opts.timeZone });
   } catch (err) {
     console.error('Aurora fetch failed, using defaults:', err.message);
     aurora = {
@@ -464,6 +464,8 @@ export async function generatePlan(targetDate, options = {}) {
   const primaryDriveMin = primary ? (primary.zone.driveMinutes[0] + primary.zone.driveMinutes[1]) / 2 : 45;
   const departHour = Math.max(17, parseInt(darkWindow.darkStart) - 1);
   const arriveHour = departHour + Math.ceil(primaryDriveMin / 60);
+  // Wrap past midnight instead of clamping at 23:00 (a late depart + long drive can land after 00:00).
+  const arriveClock = `${String(arriveHour % 24).padStart(2, '0')}:00`;
   const nextDateStr = addDaysToDateStr(dateStr, 1);
 
   // Road safety assessment
@@ -501,6 +503,19 @@ export async function generatePlan(targetDate, options = {}) {
       roadRisk: roadRisk.summary,
       regionSafetyNotes: opts.regionSafetyNotes || null,
       confidence: `${confidence.level} - ${confidence.reason}`,
+      // Structured fields for the hero verdict readout (strings above stay for back-compat)
+      confidenceLevel: confidence.level,
+      verdict: primary ? classifyCheckpoint(primary.weatherScore) : 'NOGO',
+      auroraProbability: typeof aurora.locationProbability === 'number' ? Math.round(aurora.locationProbability) : null,
+      kpMax: aurora.tonightKp?.max ?? null,
+      activityLevel: aurora.activityLevel,
+      winnerZone: primary ? `Zone ${primary.zoneCode} · ${primary.zone.name}` : null,
+      winnerLocation: primaryLoc?.name || null,
+      cloudTotal: primary ? primary.weatherScore.avgCloudTotal : null,
+      cloudLow: primary ? primary.weatherScore.avgCloudLow : null,
+      tempC: primary ? primary.weatherScore.tempC : null,
+      wind: primary ? primary.weatherScore.avgWind : null,
+      gust: primary ? primary.weatherScore.maxGust : null,
     },
 
     // Section 2: Decision rule
@@ -519,7 +534,7 @@ export async function generatePlan(targetDate, options = {}) {
       forecastCheck: '15:00',
       finalCommit: '19:00',
       depart: `${String(departHour).padStart(2, '0')}:00`,
-      arrive: `${String(Math.min(arriveHour, 23)).padStart(2, '0')}:00`,
+      arrive: arriveClock,
       bestWindow: `${darkWindow.darkStart} - 01:00`,
       repositionTrigger: '22:00 (if primary not working, switch to backup)',
       giveUp: '02:00 (fatigue safety - begin return)',

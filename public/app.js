@@ -301,6 +301,12 @@ function detectCity(origin) {
 }
 
 async function runPlan() {
+  if (!navigator.onLine) {
+    showError("You're offline. Live weather and aurora data need a connection — your last saved plan is still shown above.");
+    setStatus('error', 'Offline');
+    return;
+  }
+
   showLoading(true);
   hideError();
   hidePlanContent();
@@ -325,6 +331,12 @@ async function runPlan() {
     }
     const data = await api(`/api/plan?${params.toString()}`);
     currentPlan = data.plan;
+
+    // Be honest when a custom city can't be resolved: with AI off the server falls
+    // back to its built-in zones, so tell the user rather than silently switching cities.
+    if (city && data.aiEnabled === false) {
+      currentPlan._aiNotice = `City lookup is off on this server, so zones fall back to ${currentPlan.cityName}. Set OPENAI_API_KEY to build zones for "${city}".`;
+    }
 
     // Pick up AI-detected timezone for future requests
     if (data.plan?.settings?.timeZone && data.plan.settings.timeZone !== timeZone) {
@@ -738,7 +750,93 @@ function startCountdown(plan) {
 
 // --- Plan Renderer ---
 
+function formatDateLabel(dateStr) {
+  try {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  } catch {
+    return dateStr;
+  }
+}
+
+// The empty-state hero shown before any plan runs.
+function renderEmptyHero() {
+  const el = document.getElementById('hero');
+  if (!el || currentPlan) return;
+  el.innerHTML = `
+    <div class="hero-card hero-empty">
+      <div class="hero-aurora" aria-hidden="true"></div>
+      <div class="hero-body">
+        <span class="hero-eyebrow">Ready when you are</span>
+        <div class="hero-empty-title">Where should you chase the lights tonight?</div>
+        <p class="hero-empty-sub">Set your city in Settings, then run tonight's plan. I read live clouds, aurora activity, the moon and the dark window, and rank every viewing zone inside your drive limit.</p>
+        <button class="hero-cta" onclick="runPlan()">Run tonight's plan</button>
+      </div>
+    </div>
+  `;
+}
+
+// The verdict readout — the app's core output at a glance.
+function renderHero(plan) {
+  const el = document.getElementById('hero');
+  if (!el) return;
+  const g = plan.atAGlance || {};
+
+  const verdict = String(g.verdict || 'MAYBE').toUpperCase();
+  const verdictClass = verdict === 'GO' ? 'verdict-go' : verdict === 'NOGO' ? 'verdict-nogo' : 'verdict-maybe';
+  const verdictLabel = verdict === 'NOGO' ? 'NO-GO' : verdict;
+
+  const level = String(g.confidenceLevel || 'MEDIUM').toUpperCase();
+  const confClass = level === 'HIGH' ? 'confidence-high' : level === 'LOW' ? 'confidence-low' : 'confidence-med';
+  const confPct = level === 'HIGH' ? 92 : level === 'LOW' ? 34 : 63;
+
+  const winnerName = g.winnerLocation || g.winnerZone || 'Check zones manually';
+  const subParts = [];
+  if (g.winnerLocation && g.winnerZone) subParts.push(g.winnerZone);
+  if (g.tempC != null) subParts.push(`${g.tempC}°C`);
+  const winnerSub = subParts.join(' · ');
+
+  const cloud = g.cloudTotal;
+  const prob = g.auroraProbability;
+  const kp = g.kpMax;
+  const activity = String(g.activityLevel || '').toLowerCase();
+  const wind = g.wind;
+
+  const cityName = plan.cityName || (userSettings.origin || 'Reykjavík');
+  const dateLabel = plan.date ? formatDateLabel(plan.date) : '';
+
+  el.innerHTML = `
+    <div class="hero-card">
+      <div class="hero-aurora" aria-hidden="true"></div>
+      <div class="hero-body">
+        <span class="hero-eyebrow">Tonight${dateLabel ? ' · ' + escapeHtml(dateLabel) : ''} · ${escapeHtml(cityName)}</span>
+        <div class="hero-top">
+          <span class="verdict-pill ${verdictClass}">${escapeHtml(verdictLabel)}</span>
+        </div>
+        <div class="hero-winner">
+          <span class="hero-winner-label">Best sky tonight</span>
+          <span class="hero-winner-name">${escapeHtml(winnerName)}</span>
+          ${winnerSub ? `<span class="hero-winner-sub">${escapeHtml(winnerSub)}</span>` : ''}
+        </div>
+        <div class="hero-meter">
+          <div class="hero-meter-head"><span>Confidence</span><span class="hero-meter-level ${confClass}">${escapeHtml(level)}</span></div>
+          <div class="meter-track"><div class="meter-fill ${confClass}" style="width:${confPct}%"></div></div>
+        </div>
+        <div class="hero-stats">
+          <div class="hero-stat"><span class="hero-stat-val">${cloud != null ? cloud + '%' : '—'}</span><span class="hero-stat-key">cloud</span></div>
+          <div class="hero-stat"><span class="hero-stat-val aurora">${prob != null ? prob + '%' : '—'}</span><span class="hero-stat-key">aurora</span></div>
+          <div class="hero-stat"><span class="hero-stat-val data">Kp ${kp != null ? kp : '—'}</span><span class="hero-stat-key">${escapeHtml(activity || 'activity')}</span></div>
+          <div class="hero-stat"><span class="hero-stat-val">${wind != null ? wind + 'm/s' : '—'}</span><span class="hero-stat-key">wind</span></div>
+        </div>
+        ${plan._aiNotice ? `<div class="ai-notice">${escapeHtml(plan._aiNotice)}</div>` : ''}
+      </div>
+    </div>
+  `;
+}
+
 function renderPlan(plan) {
+  renderHero(plan);
+
   const el = document.getElementById('plan-content');
   el.innerHTML = '';
 
@@ -814,15 +912,21 @@ function renderSection(num, title, contentHtml, collapsed = false) {
   const section = document.createElement('div');
   section.className = `plan-section${collapsed ? ' collapsed' : ''}`;
   section.innerHTML = `
-    <div class="plan-section-header">
+    <div class="plan-section-header" role="button" tabindex="0" aria-expanded="${!collapsed}">
       <span class="section-number">${num}</span>
       <span class="section-title">${title}</span>
-      <span class="section-chevron">&#9660;</span>
+      <span class="section-chevron" aria-hidden="true">&#9660;</span>
     </div>
     <div class="plan-section-body">${contentHtml}</div>
   `;
-  section.querySelector('.plan-section-header').addEventListener('click', () => {
+  const header = section.querySelector('.plan-section-header');
+  const toggle = () => {
     section.classList.toggle('collapsed');
+    header.setAttribute('aria-expanded', String(!section.classList.contains('collapsed')));
+  };
+  header.addEventListener('click', toggle);
+  header.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
   });
   return section;
 }
@@ -1449,6 +1553,9 @@ function showModal(html) {
   document.getElementById('modal-content').innerHTML = html;
   document.getElementById('modal-overlay').classList.remove('hidden');
   lockScroll();
+  // Move focus into the dialog for keyboard + screen-reader users.
+  const first = document.querySelector('#modal-content input, #modal-content select, #modal-content button');
+  if (first) setTimeout(() => first.focus(), 30);
 }
 
 function hideModal() {
@@ -1467,7 +1574,17 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') hideModal();
 });
 
+// --- Connectivity ---
+function updateOnlineStatus() {
+  const banner = document.getElementById('offline-banner');
+  if (banner) banner.classList.toggle('hidden', navigator.onLine);
+}
+window.addEventListener('online', updateOnlineStatus);
+window.addEventListener('offline', updateOnlineStatus);
+
 // --- Init ---
 updateSubtitle();
+updateOnlineStatus();
 restoreLastPlanIfFresh();
+renderEmptyHero();
 maybeShowLocationPrompt();

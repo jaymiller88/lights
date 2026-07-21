@@ -83,7 +83,7 @@ app.get('/api/plan', async (req, res) => {
     // Return cached plan if same params and less than 30 min old
     if (cachedPlan && cachedPlanKey === key &&
         Date.now() - new Date(cachedPlan.generatedAt).getTime() < 30 * 60 * 1000) {
-      return res.json({ ok: true, plan: cachedPlan, cached: true });
+      return res.json({ ok: true, plan: cachedPlan, cached: true, aiEnabled: AI_ENABLED });
     }
 
     if (generating) {
@@ -130,12 +130,17 @@ app.get('/api/plan', async (req, res) => {
     cachedPlanKey = key;
     generating = false;
 
-    res.json({ ok: true, plan, cached: false });
+    res.json({ ok: true, plan, cached: false, aiEnabled: AI_ENABLED });
   } catch (err) {
     generating = false;
     console.error('Plan generation error:', err);
     res.status(500).json({ ok: false, error: err.message });
   }
+});
+
+// GET /api/health - readiness/liveness probe
+app.get('/api/health', (req, res) => {
+  res.json({ ok: true, service: 'aurora-chase-copilot', aiEnabled: AI_ENABLED, uptime: process.uptime() });
 });
 
 // GET /api/condense - Get condensed plan

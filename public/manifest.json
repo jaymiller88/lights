@@ -1,19 +1,21 @@
 {
+  "id": "/",
   "name": "Aurora Chase Copilot",
   "short_name": "Aurora",
-  "description": "3-hour-radius aurora forecast + chase plan, with met.no and NOAA SWPC data.",
-  "start_url": "/northern-lights-app/",
-  "scope": "/northern-lights-app/",
+  "description": "Tonight's aurora chase plan — clouds, Kp, moon, driving zones, and a camera + safety playbook. Works offline in the field.",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0a0a12",
-  "theme_color": "#0a0a12",
+  "background_color": "#070b14",
+  "theme_color": "#070b14",
+  "categories": ["travel", "weather", "utilities"],
   "icons": [
     {
       "src": "/icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any"
+      "purpose": "any maskable"
     },
     {
       "src": "/apple-touch-icon.svg",
