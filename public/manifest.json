@@ -1,10 +1,10 @@
 {
-  "id": "/",
+  "id": "./",
   "name": "Aurora Chase Copilot",
   "short_name": "Aurora",
   "description": "Tonight's aurora chase plan — clouds, Kp, moon, driving zones, and a camera + safety playbook. Works offline in the field.",
-  "start_url": "/",
-  "scope": "/",
+  "start_url": ".",
+  "scope": ".",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#070b14",
@@ -12,13 +12,13 @@
   "categories": ["travel", "weather", "utilities"],
   "icons": [
     {
-      "src": "/icon.svg",
+      "src": "icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
     },
     {
-      "src": "/apple-touch-icon.svg",
+      "src": "apple-touch-icon.svg",
       "sizes": "180x180",
       "type": "image/svg+xml",
       "purpose": "any"

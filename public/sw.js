@@ -8,15 +8,19 @@
 const CACHE_NAME = 'aurora-copilot-shell-v1';
 const RUNTIME_CACHE = 'aurora-copilot-runtime-v1';
 
+// Relative to the SW's own URL, so the shell caches correctly whether the app is
+// served at the origin root or mounted under a path (e.g. /northern-lights-app/).
 const APP_SHELL = [
-  '/',
-  '/index.html',
-  '/style.css',
-  '/app.js',
-  '/manifest.json',
-  '/icon.svg',
-  '/apple-touch-icon.svg',
+  './',
+  './index.html',
+  './style.css',
+  './app.js',
+  './manifest.json',
+  './icon.svg',
+  './apple-touch-icon.svg',
 ];
+// The shell "index" URL for navigation fallbacks, resolved against the SW scope.
+const SHELL_INDEX = new URL('./index.html', self.location.href).href;
 
 const FONT_ORIGINS = ['https://fonts.googleapis.com', 'https://fonts.gstatic.com'];
 
@@ -47,12 +51,13 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   const sameOrigin = url.origin === self.location.origin;
 
-  // Live data is never cached — always hit the network.
-  if (sameOrigin && url.pathname.startsWith('/api/')) return;
+  // Live data is never cached — always hit the network. Matches both a root
+  // "/api/..." and a mounted "/northern-lights-app/api/..." path.
+  if (sameOrigin && /(^|\/)api\//.test(url.pathname)) return;
 
   // App shell navigations: fresh when online, cached shell when offline.
   if (request.mode === 'navigate') {
-    event.respondWith(networkFirst(request, '/index.html'));
+    event.respondWith(networkFirst(request, SHELL_INDEX));
     return;
   }
 

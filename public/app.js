@@ -329,7 +329,7 @@ async function runPlan() {
     if (city) {
       params.set('city', city);
     }
-    const data = await api(`/api/plan?${params.toString()}`);
+    const data = await api(`api/plan?${params.toString()}`);
     currentPlan = data.plan;
 
     // Be honest when a custom city can't be resolved: with AI off the server falls
@@ -363,7 +363,7 @@ async function condensePlan() {
   }
 
   try {
-    const data = await api('/api/condense');
+    const data = await api('api/condense');
     showModal(`
       <div class="modal-title">CONDENSED PLAN</div>
       <div class="condensed-view">${escapeHtml(data.condensed)}</div>
@@ -608,7 +608,7 @@ async function submitUpdate() {
   const snow = document.getElementById('update-snow').value;
 
   try {
-    const data = await api('/api/update', {
+    const data = await api('api/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ location, sky, snow }),
@@ -651,7 +651,7 @@ async function submitCameraHelp() {
   const issue = document.getElementById('camera-issue').value;
 
   try {
-    const data = await api(`/api/camera-help/${encodeURIComponent(issue)}`);
+    const data = await api(`api/camera-help/${encodeURIComponent(issue)}`);
     const d = data.diagnosis;
 
     document.getElementById('camera-result').innerHTML = `
@@ -675,7 +675,7 @@ async function submitCameraHelp() {
 
 async function showParking() {
   try {
-    const data = await api('/api/parking');
+    const data = await api('api/parking');
     showModal(`
       <div class="modal-title">SAFE PARKING CHECK</div>
       <div class="parking-col">
